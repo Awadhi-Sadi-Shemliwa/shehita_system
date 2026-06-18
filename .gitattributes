@@ -1,0 +1,8 @@
+# Normalize line endings: store as LF in the repo so files behave correctly
+# when checked out on the Linux VPS during deployment.
+* text=auto eol=lf
+
+# Treat the logo as binary (never touch its bytes)
+*.png binary
+*.jpg binary
+*.jpeg binary

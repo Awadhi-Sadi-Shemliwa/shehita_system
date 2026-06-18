@@ -1,0 +1,22 @@
+# ---- Secrets ----
+.env
+*.local.env
+# keep the template
+!.env.example
+
+# ---- Runtime-uploaded files ----
+# Track only the committed system logo; ignore everything users upload at runtime.
+/uploads/*
+!/uploads/systemlogo/
+/uploads/systemlogo/*
+!/uploads/systemlogo/Shehita_Logo.png
+
+# ---- Logs ----
+*.log
+
+# ---- OS / editor cruft ----
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp

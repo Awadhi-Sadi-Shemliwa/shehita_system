@@ -1,0 +1,52 @@
+# Production stack for system.shehita.co.tz
+#
+# Usage on the VPS:
+#   1. Copy .env.example to .env and fill in strong secrets (see that file).
+#   2. docker compose -f docker-compose.prod.yml up -d --build
+#
+# Key differences from the local docker-compose.yml:
+#   - The web port is bound to 127.0.0.1 only, so ONLY Nginx (on the host)
+#     can reach it. The container is never exposed directly to the internet.
+#   - The MySQL port is NOT published at all — the database is reachable only
+#     from inside this compose network.
+#   - All secrets come from the .env file, nothing is hard-coded.
+#   - restart: unless-stopped keeps the app running across reboots/crashes.
+
+services:
+  web:
+    build: .
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8080:80"   # change 8080 if that host port is already used by your FastAPI app
+    volumes:
+      - .:/var/www/html
+      - ./uploads:/var/www/html/uploads   # persist uploaded logos/files
+    environment:
+      APP_ENV: production
+      DB_HOST: db
+      DB_USER: root
+      DB_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      DB_NAME: ${DB_NAME}
+      ADMIN_DEFAULT_EMAIL: ${ADMIN_DEFAULT_EMAIL}
+      ADMIN_DEFAULT_PASSWORD: ${ADMIN_DEFAULT_PASSWORD}
+    depends_on:
+      db:
+        condition: service_healthy
+
+  db:
+    image: mysql:8.0
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      MYSQL_DATABASE: ${DB_NAME}
+    # No host port published — the DB is private to this compose network.
+    volumes:
+      - dbdata:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-p$$MYSQL_ROOT_PASSWORD"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+
+volumes:
+  dbdata:
