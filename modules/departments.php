@@ -1,6 +1,6 @@
 <?php
 /**
- * PAPLONTECH Enterprise Management System
+ * SHEHITA Enterprise Management System
  * Departments Module - Full CRUD Operations
  * 
  * This module handles:

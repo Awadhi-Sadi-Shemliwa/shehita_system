@@ -1,6 +1,6 @@
 <?php
 /**
- * PAPLONTECH Enterprise Management System
+ * SHEHITA Enterprise Management System
  * Configuration File - Database connection and helper functions
  * 
  * ENHANCED: Added permission helper functions for role-based access control

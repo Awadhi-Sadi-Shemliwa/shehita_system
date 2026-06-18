@@ -1,6 +1,6 @@
 <?php
 /**
- * PAPLONTECH Enterprise Management System
+ * SHEHITA Enterprise Management System
  * Root index - Redirects to login page
  */
 

@@ -1,6 +1,6 @@
 <?php
 /**
- * PAPLONTECH Enterprise Management System
+ * SHEHITA Enterprise Management System
  * Main Layout with Top Horizontal Navbar and Dynamic Content Loading
  * 
  * ENHANCED: Top navigation bar with dropdown menus
@@ -137,8 +137,11 @@ $logo_exists = !empty($logo_path);
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>PAPLONTECH | <?= ucfirst(str_replace('-', ' ', $current_page)) ?></title>
-    
+    <title>SHEHITA EMS | <?= ucfirst(str_replace('-', ' ', $current_page)) ?></title>
+    <?php if ($logo_exists): ?>
+    <link rel="icon" type="image/png" href="<?= htmlspecialchars($logo_path) ?>">
+    <?php endif; ?>
+
     <!-- Font Awesome 6 -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     
@@ -958,11 +961,11 @@ $logo_exists = !empty($logo_path);
             <a href="?page=home" class="navbar-logo">
                 <?php if ($logo_exists): ?>
                     <div class="navbar-logo-wrapper">
-                        <img src="<?= htmlspecialchars($logo_path) ?>" alt="PAPLONTECH" class="navbar-logo-img">
+                        <img src="<?= htmlspecialchars($logo_path) ?>" alt="SHEHITA EMS" class="navbar-logo-img">
                     </div>
                 <?php else: ?>
                     <div>
-                        <div class="navbar-logo-text">PAPLONTECH</div>
+                        <div class="navbar-logo-text">SHEHITA EMS</div>
                         <div class="navbar-logo-sub">Enterprise Management System</div>
                     </div>
                 <?php endif; ?>

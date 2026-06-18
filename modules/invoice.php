@@ -1,6 +1,6 @@
 <?php
 /**
- * PAPLONTECH Enterprise Management System
+ * SHEHITA Enterprise Management System
  * Invoice Module - Full CRUD Operations with Professional Invoice Generation
  * 
  * This module handles:
@@ -160,7 +160,7 @@ function getCompanySettingsForInvoice($conn) {
         return $settings;
     }
     return [
-        'company_name' => 'PAPLONTECH',
+        'company_name' => 'SHEHITA EMS',
         'company_address' => '',
         'company_email' => '',
         'company_phone' => '',
@@ -2259,7 +2259,7 @@ window.updateInvoiceLanguage = updateInvoiceLanguage;
 <script>
     // Company settings for invoice display
     const inv_companySettings = <?php echo json_encode([
-        'company_name' => $company_settings['company_name'] ?? 'PAPLONTECH',
+        'company_name' => $company_settings['company_name'] ?? 'SHEHITA EMS',
         'company_address' => $company_settings['company_address'] ?? '',
         'company_email' => $company_settings['company_email'] ?? '',
         'company_phone' => $company_settings['company_phone'] ?? '',

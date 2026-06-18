@@ -1,6 +1,6 @@
 <?php
 /**
- * PAPLONTECH Enterprise Management System
+ * SHEHITA Enterprise Management System
  * Project Group Module - Full CRUD Operations
  * 
  * REFINED: Removed all sidebar-related code (no localStorage, no sidebar event listeners)

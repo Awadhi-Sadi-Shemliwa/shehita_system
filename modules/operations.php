@@ -1,6 +1,6 @@
 <?php
 /**
- * PAPLONTECH Enterprise Management System
+ * SHEHITA Enterprise Management System
  * Operations Module - Operations & Quality Management
  * 
  * REFINED: Removed all sidebar-related code (no localStorage, no sidebar event listeners)
@@ -566,7 +566,7 @@ function getCompanySettings($conn) {
         return $result->fetch_assoc();
     }
     return [
-        'company_name' => 'PAPLONTECH',
+        'company_name' => 'SHEHITA EMS',
         'company_address' => '',
         'company_email' => '',
         'company_phone' => '',
@@ -3113,7 +3113,7 @@ window.updateOperationsLanguage = updateOperationsLanguage;
     // INVOICE MODAL FUNCTIONS (UPDATED to include Company VRN and Client VRN)
     // ============================================================================
     const operations_companySettings = <?php echo json_encode([
-        'company_name' => $company_settings['company_name'] ?? 'PAPLONTECH',
+        'company_name' => $company_settings['company_name'] ?? 'SHEHITA EMS',
         'company_address' => $company_settings['company_address'] ?? '',
         'company_email' => $company_settings['company_email'] ?? '',
         'company_phone' => $company_settings['company_phone'] ?? '',

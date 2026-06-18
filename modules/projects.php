@@ -1,6 +1,6 @@
 <?php
 /**
- * PAPLONTECH Enterprise Management System
+ * SHEHITA Enterprise Management System
  * Projects Module - Contract Management with Financial Tracking
  * 
  * This module handles:
@@ -148,7 +148,7 @@ function getCompanySettings($conn) {
         return $result->fetch_assoc();
     }
     return [
-        'company_name' => 'PAPLONTECH',
+        'company_name' => 'SHEHITA EMS',
         'company_address' => '',
         'company_email' => '',
         'company_phone' => '',
@@ -2649,7 +2649,7 @@ window.updateProjectsLanguage = updateProjectsLanguage;
     // INVOICE MODAL FUNCTIONS
     // ============================================================================
     const projectmanage_companySettings = <?php echo json_encode([
-        'company_name' => $company_settings['company_name'] ?? 'PAPLONTECH',
+        'company_name' => $company_settings['company_name'] ?? 'SHEHITA EMS',
         'company_address' => $company_settings['company_address'] ?? '',
         'company_email' => $company_settings['company_email'] ?? '',
         'company_phone' => $company_settings['company_phone'] ?? '',

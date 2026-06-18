@@ -1,6 +1,6 @@
 <?php
 /**
- * PAPLONTECH Enterprise Management System
+ * SHEHITA Enterprise Management System
  * User Management Module - Full CRUD Operations with Advanced Features
  * 
  * This module handles:
@@ -133,38 +133,28 @@ foreach ($required_columns as $column => $definition) {
  * This is created by config.php, but we ensure it exists for safety
  * ============================================================================
  */
-$check_admin = $conn->query("SELECT id FROM users WHERE email = 'admin@paplontech.com'");
-if ($check_admin->num_rows == 0) {
-    $admin_name = 'System Administrator';
-    $admin_email = 'admin@paplontech.com';
-    $admin_password = password_hash('admin123', PASSWORD_DEFAULT);
-    $admin_status = 'Active';
-    $admin_phone = '';
-    $admin_address = '';
-    $admin_department_id = 1; // Administrator department
-    $admin_role_id = 1;       // Super Admin role
-    
-    $insert_admin = $conn->prepare("INSERT INTO users (name, email, password, phone, address, department_id, role_id, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?)");
-    $insert_admin->bind_param("sssssiis", $admin_name, $admin_email, $admin_password, $admin_phone, $admin_address, $admin_department_id, $admin_role_id, $admin_status);
-    $insert_admin->execute();
-    $insert_admin->close();
-    
-    // Ensure admin gets ID = 1
-    $admin_id = $conn->insert_id;
-    if ($admin_id != 1) {
-        $conn->query("UPDATE users SET id = 1 WHERE email = 'admin@paplontech.com'");
-        $conn->query("ALTER TABLE users AUTO_INCREMENT = 2");
-    }
-} else {
-    // Ensure admin has correct department (Administrator, ID=1) and role (Super Admin, ID=1)
+// The default admin is created by config.php using the ADMIN_DEFAULT_EMAIL
+// environment variable. We look it up by that same email and only ensure its
+// id/department/role are correct — we never seed a weak hard-coded password here.
+$admin_email = getenv('ADMIN_DEFAULT_EMAIL') ?: 'admin@paplontech.com';
+
+$stmt = $conn->prepare("SELECT id FROM users WHERE email = ?");
+$stmt->bind_param("s", $admin_email);
+$stmt->execute();
+$check_admin = $stmt->get_result();
+if ($check_admin->num_rows > 0) {
+    // Ensure admin has correct id (1), department (Administrator) and role (Super Admin)
     $admin = $check_admin->fetch_assoc();
     if ($admin['id'] != 1) {
-        $conn->query("UPDATE users SET id = 1 WHERE email = 'admin@paplontech.com'");
+        $upd = $conn->prepare("UPDATE users SET id = 1 WHERE email = ?");
+        $upd->bind_param("s", $admin_email);
+        $upd->execute();
+        $upd->close();
         $conn->query("ALTER TABLE users AUTO_INCREMENT = 2");
     }
-    // Ensure admin has correct department and role
     $conn->query("UPDATE users SET department_id = 1, role_id = 1 WHERE id = 1 AND (department_id != 1 OR role_id != 1)");
 }
+$stmt->close();
 
 /**
  * ============================================================================

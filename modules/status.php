@@ -1,6 +1,6 @@
 <?php
 /**
- * PAPLONTECH Enterprise Management System
+ * SHEHITA Enterprise Management System
  * Status Module - Project Status Tracking for Active Operations
  * 
  * REFINED: Removed all sidebar-related code (no localStorage, no sidebar event listeners)
@@ -252,7 +252,7 @@ function getStatusCompanySettings($conn) {
         return $result->fetch_assoc();
     }
     return [
-        'company_name' => 'PAPLONTECH',
+        'company_name' => 'SHEHITA EMS',
         'company_address' => '',
         'company_email' => '',
         'company_phone' => '',

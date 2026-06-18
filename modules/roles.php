@@ -1,6 +1,6 @@
 <?php
 /**
- * PAPLONTECH Enterprise Management System
+ * SHEHITA Enterprise Management System
  * Roles Module - Full CRUD Operations with Department Association
  * 
  * REFINED: Removed all sidebar-related code (already clean - Issue #1)

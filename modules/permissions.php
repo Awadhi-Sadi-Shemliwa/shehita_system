@@ -1,6 +1,6 @@
 <?php
 /**
- * PAPLONTECH Enterprise Management System
+ * SHEHITA Enterprise Management System
  * Permissions Module - Full CRUD Operations with Department Integration
  * 
  * This module handles:

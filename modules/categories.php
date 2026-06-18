@@ -1,6 +1,6 @@
 <?php
 /**
- * PAPLONTECH Enterprise Management System
+ * SHEHITA Enterprise Management System
  * Categories Module - Full CRUD Operations
  * 
  * REFINED: Removed all sidebar-related code (Issue #1)

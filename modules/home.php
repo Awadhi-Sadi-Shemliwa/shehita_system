@@ -1,6 +1,6 @@
 <?php
 /**
- * PAPLONTECH Enterprise Management System
+ * SHEHITA Enterprise Management System
  * Home Dashboard Module - Main landing page with key metrics
  * 
  * ENHANCED: Added unassigned projects notification badge
@@ -18,7 +18,7 @@
  * - Full English/Swahili translation support
  * - Permission-based access control
  * 
- * @package PAPLONTECH_EMS
+ * @package SHEHITA_EMS
  * @version 1.3
  */
 

@@ -1,6 +1,6 @@
 <?php
 /**
- * PAPLONTECH Enterprise Management System
+ * SHEHITA Enterprise Management System
  * System Settings Module - Global Configuration Management
  * 
  * REFINED: Removed all sidebar-related code (Issue #1)
@@ -60,7 +60,7 @@ if (!canView($conn, $user_role_id, $module_name)) {
 // Define default settings
 $default_settings = [
     // General Settings
-    ['app_name', 'PAPLONTECH EMS', 'text', 'Application Name', 'System name displayed in browser title and headers', null, 10],
+    ['app_name', 'SHEHITA EMS', 'text', 'Application Name', 'System name displayed in browser title and headers', null, 10],
     ['default_language', 'en', 'select', 'Default Language', 'Default language for new users and guests', json_encode(['en' => 'English', 'sw' => 'Swahili']), 20],
     ['timezone', 'Africa/Dar_es_Salaam', 'select', 'Timezone', 'System timezone for date/time display', json_encode([
         'Africa/Dar_es_Salaam' => 'Africa/Dar_es_Salaam (EAT)',
@@ -90,7 +90,7 @@ $default_settings = [
     
     // Email Settings
     ['email_from_address', 'noreply@paplontech.com', 'email', 'Email From Address', 'Default sender email address for system emails', null, 410],
-    ['email_from_name', 'PAPLONTECH EMS', 'text', 'Email From Name', 'Default sender name for system emails', null, 420]
+    ['email_from_name', 'SHEHITA EMS', 'text', 'Email From Name', 'Default sender name for system emails', null, 420]
 ];
 
 // Insert default settings if they don't exist

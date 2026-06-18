@@ -1,6 +1,6 @@
 <?php
 /**
- * PAPLONTECH Enterprise Management System
+ * SHEHITA Enterprise Management System
  * Overview Module - Executive Dashboard for Contracts and Operations
  * 
  * REFINED: Removed all sidebar-related code (Issue #1)
@@ -112,7 +112,7 @@ function getOverviewCompanySettings($conn) {
         return $result->fetch_assoc();
     }
     return [
-        'company_name' => 'PAPLONTECH',
+        'company_name' => 'SHEHITA EMS',
         'company_address' => '',
         'company_email' => '',
         'company_phone' => '',
