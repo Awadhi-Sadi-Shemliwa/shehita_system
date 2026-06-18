@@ -9,6 +9,7 @@
 /uploads/*
 !/uploads/systemlogo/
 /uploads/systemlogo/*
+!/uploads/systemlogo/shehita-logo.jpg
 !/uploads/systemlogo/Shehita_Logo.png
 
 # ---- Logs ----

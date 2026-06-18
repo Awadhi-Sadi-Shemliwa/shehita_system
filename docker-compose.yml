@@ -11,8 +11,8 @@ services:
       DB_USER: root
       DB_PASSWORD: rootpass
       DB_NAME: if0_41659126_db_business
-      ADMIN_DEFAULT_EMAIL: admin@paplontech.com
-      ADMIN_DEFAULT_PASSWORD: admin123   # local-only default; not used in production
+      ADMIN_DEFAULT_EMAIL: admin@example.com
+      ADMIN_DEFAULT_PASSWORD: changeme123   # local-only default; not used in production
     depends_on:
       db:
         condition: service_healthy

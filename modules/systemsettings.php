@@ -89,7 +89,7 @@ $default_settings = [
     ['favicon_path', 'uploads/systemlogo/favicon.ico', 'text', 'Favicon Path', 'Path to the favicon image', null, 320],
     
     // Email Settings
-    ['email_from_address', 'noreply@paplontech.com', 'email', 'Email From Address', 'Default sender email address for system emails', null, 410],
+    ['email_from_address', 'noreply@example.com', 'email', 'Email From Address', 'Default sender email address for system emails', null, 410],
     ['email_from_name', 'SHEHITA EMS', 'text', 'Email From Name', 'Default sender name for system emails', null, 420]
 ];
 

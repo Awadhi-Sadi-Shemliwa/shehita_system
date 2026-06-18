@@ -136,13 +136,13 @@ foreach ($required_columns as $column => $definition) {
 // The default admin is created by config.php using the ADMIN_DEFAULT_EMAIL
 // environment variable. We look it up by that same email and only ensure its
 // id/department/role are correct — we never seed a weak hard-coded password here.
-$admin_email = getenv('ADMIN_DEFAULT_EMAIL') ?: 'admin@paplontech.com';
+$admin_email = getenv('ADMIN_DEFAULT_EMAIL') ?: '';
 
 $stmt = $conn->prepare("SELECT id FROM users WHERE email = ?");
 $stmt->bind_param("s", $admin_email);
 $stmt->execute();
 $check_admin = $stmt->get_result();
-if ($check_admin->num_rows > 0) {
+if ($admin_email !== '' && $check_admin->num_rows > 0) {
     // Ensure admin has correct id (1), department (Administrator) and role (Super Admin)
     $admin = $check_admin->fetch_assoc();
     if ($admin['id'] != 1) {

@@ -6,7 +6,8 @@ the `?page=` query parameter. Every module is gated by the role-based access con
 (RBAC) helpers defined in `config.php` (`canView/canAdd/canEdit/canDelete`). Role
 `role_id = 1` ("Super Admin") implicitly has full access to everything.
 
-Default login (seeded by `config.php`): **admin@paplontech.com / admin123**
+Default login: the admin account seeded by `config.php` from the
+`ADMIN_DEFAULT_EMAIL` / `ADMIN_DEFAULT_PASSWORD` environment variables.
 
 ---
 

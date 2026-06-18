@@ -30,7 +30,7 @@ The first run builds/downloads images (slow). After that it starts in a few seco
 **3. Open the app** in your browser:
 
 - URL: **http://localhost:8080**
-- Login: **admin@paplontech.com** / **admin123**
+- Login: the `ADMIN_DEFAULT_EMAIL` / `ADMIN_DEFAULT_PASSWORD` set in `docker-compose.yml` (local dev defaults: `admin@example.com` / `changeme123`)
 
 **4. Stop it when you're done** (keeps all your data):
 ```powershell

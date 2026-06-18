@@ -24,7 +24,7 @@ $preserved_email = '';
 // Determine logo path - dynamic based on current directory
 $logo_path = '';
 $possible_logo_paths = [
-    'uploads/systemlogo/Shehita_Logo.png',
+    'uploads/systemlogo/shehita-logo.jpg',
     'uploads/systemlogo/Shehita_Logo.jpg',
     'uploads/systemlogo/Shehita_Logo.jpeg',
     'uploads/systemlogo/logo.png',
@@ -111,7 +111,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['login'])) {
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>SHEHITA EMS - Login</title>
     <?php if ($logo_exists): ?>
-    <link rel="icon" type="image/png" href="<?= htmlspecialchars($logo_path) ?>">
+    <link rel="icon" href="<?= htmlspecialchars($logo_path) ?>">
     <?php endif; ?>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Montserrat:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <style>

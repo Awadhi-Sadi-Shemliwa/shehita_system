@@ -324,42 +324,46 @@ if ($result->num_rows == 0) {
 
 /**
  * Ensure default admin account exists.
- * The initial email/password come from environment variables. If no password
- * is provided, a strong random one is generated and written to the error log
- * so the operator can retrieve it once — it is never hard-coded in source.
+ * The initial email/password come ENTIRELY from environment variables
+ * (ADMIN_DEFAULT_EMAIL / ADMIN_DEFAULT_PASSWORD) — nothing is hard-coded.
+ * If no admin email is configured, seeding is skipped. If an email is set but
+ * no password, a strong random one is generated and written to the error log
+ * so the operator can retrieve it once.
  */
-$adminEmail = getenv('ADMIN_DEFAULT_EMAIL') ?: 'admin@paplontech.com';
+$adminEmail = getenv('ADMIN_DEFAULT_EMAIL') ?: '';
 
-$stmt = $conn->prepare("SELECT id FROM users WHERE email = ?");
-$stmt->bind_param("s", $adminEmail);
-$stmt->execute();
-$adminExists = $stmt->get_result()->num_rows > 0;
-$stmt->close();
-
-if (!$adminExists) {
-    $adminPlainPassword = getenv('ADMIN_DEFAULT_PASSWORD');
-    if ($adminPlainPassword === false || $adminPlainPassword === '') {
-        $adminPlainPassword = bin2hex(random_bytes(9)); // 18-char random password
-        error_log("config.php: created initial admin '{$adminEmail}' with generated password: {$adminPlainPassword}");
-    }
-
-    $name            = 'System Administrator';
-    $dept_id         = 1;
-    $role_id         = 1;
-    $status          = 'Active';
-    $hashed_password = password_hash($adminPlainPassword, PASSWORD_DEFAULT);
-
-    $stmt = $conn->prepare("INSERT INTO users (name, email, password, department_id, role_id, status) VALUES (?, ?, ?, ?, ?, ?)");
-    $stmt->bind_param("sssiis", $name, $adminEmail, $hashed_password, $dept_id, $role_id, $status);
-    $stmt->execute();
-    $stmt->close();
-
-    // Ensure ID = 1
-    $stmt = $conn->prepare("UPDATE users SET id = 1 WHERE email = ?");
+if ($adminEmail !== '') {
+    $stmt = $conn->prepare("SELECT id FROM users WHERE email = ?");
     $stmt->bind_param("s", $adminEmail);
     $stmt->execute();
+    $adminExists = $stmt->get_result()->num_rows > 0;
     $stmt->close();
-    $conn->query("ALTER TABLE users AUTO_INCREMENT = 2");
+
+    if (!$adminExists) {
+        $adminPlainPassword = getenv('ADMIN_DEFAULT_PASSWORD');
+        if ($adminPlainPassword === false || $adminPlainPassword === '') {
+            $adminPlainPassword = bin2hex(random_bytes(9)); // 18-char random password
+            error_log("config.php: created initial admin '{$adminEmail}' with generated password: {$adminPlainPassword}");
+        }
+
+        $name            = 'System Administrator';
+        $dept_id         = 1;
+        $role_id         = 1;
+        $status          = 'Active';
+        $hashed_password = password_hash($adminPlainPassword, PASSWORD_DEFAULT);
+
+        $stmt = $conn->prepare("INSERT INTO users (name, email, password, department_id, role_id, status) VALUES (?, ?, ?, ?, ?, ?)");
+        $stmt->bind_param("sssiis", $name, $adminEmail, $hashed_password, $dept_id, $role_id, $status);
+        $stmt->execute();
+        $stmt->close();
+
+        // Ensure ID = 1
+        $stmt = $conn->prepare("UPDATE users SET id = 1 WHERE email = ?");
+        $stmt->bind_param("s", $adminEmail);
+        $stmt->execute();
+        $stmt->close();
+        $conn->query("ALTER TABLE users AUTO_INCREMENT = 2");
+    }
 }
 
 /**

@@ -110,7 +110,7 @@ $display_department = isset($_SESSION['department_name']) ? $_SESSION['departmen
 // Determine logo path - dynamic based on current directory
 $logo_path = '';
 $possible_logo_paths = [
-    'uploads/systemlogo/Shehita_Logo.png',
+    'uploads/systemlogo/shehita-logo.jpg',
     'uploads/systemlogo/Shehita_Logo.jpg',
     'uploads/systemlogo/Shehita_Logo.jpeg',
     'uploads/systemlogo/logo.png',
@@ -139,7 +139,7 @@ $logo_exists = !empty($logo_path);
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>SHEHITA EMS | <?= ucfirst(str_replace('-', ' ', $current_page)) ?></title>
     <?php if ($logo_exists): ?>
-    <link rel="icon" type="image/png" href="<?= htmlspecialchars($logo_path) ?>">
+    <link rel="icon" href="<?= htmlspecialchars($logo_path) ?>">
     <?php endif; ?>
 
     <!-- Font Awesome 6 -->
