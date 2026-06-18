@@ -193,16 +193,33 @@ if (isset($_POST['company_update']) && !canEdit($conn, $user_role_id, $module_na
             // Generate unique filename
             $filename = 'logo_company_' . date('Ymd_His') . '.jpg';
             $filepath = $full_upload_path . $filename;
-            
-            // Save file
-            if (file_put_contents($filepath, $image_base64)) {
-                // Delete old logo if it exists
-                if (!empty($existing_logo)) {
-                    deleteOldLogo($existing_logo);
-                }
-                $logo_url = $upload_dir . $filename;
+
+            // Diagnose common failure causes BEFORE attempting the write so the
+            // error message reflects the real reason instead of a generic one.
+            if ($image_base64 === false || strlen($image_base64) === 0) {
+                // Decoded image is empty/invalid. This is almost always a client-side
+                // problem (the crop tool produced a blank image, an old browser, or a
+                // blocked Cropper.js CDN), NOT a server folder permission issue.
+                $errors[] = "The image data received was empty or invalid. Please re-select the image, make sure it finishes loading in the crop window, then try again (try a different/updated browser if it persists).";
+            } elseif (!is_dir($full_upload_path)) {
+                $errors[] = "Upload folder does not exist on the server: " . $full_upload_path . ". Please create it and make it writable by the web server user (www-data).";
+            } elseif (!is_writable($full_upload_path)) {
+                $errors[] = "Upload folder is not writable by the web server: " . $full_upload_path . ". Run: chown -R www-data:www-data <site>/uploads && chmod -R 775 <site>/uploads";
             } else {
-                $errors[] = "Failed to upload logo. Please check folder permissions.";
+                // Folder is fine and we have real image bytes — attempt the write and
+                // surface the exact PHP error if it still fails (e.g. disk full).
+                $bytes_written = @file_put_contents($filepath, $image_base64);
+                if ($bytes_written !== false && $bytes_written > 0) {
+                    // Delete old logo if it exists
+                    if (!empty($existing_logo)) {
+                        deleteOldLogo($existing_logo);
+                    }
+                    $logo_url = $upload_dir . $filename;
+                } else {
+                    $php_error = error_get_last();
+                    $reason = ($php_error && !empty($php_error['message'])) ? $php_error['message'] : 'unknown error (the disk may be full)';
+                    $errors[] = "Failed to write logo file to the server. Reason: " . $reason;
+                }
             }
         } else {
             $errors[] = "Invalid image data format";
