@@ -60,8 +60,14 @@ DirectoryIndex index.php
 # modules/*.php in particular expect $conn and a session to already exist --
 # the "prevent direct access" guard at the top of each one is an empty if-body
 # and does not actually block anything, so block them here.
+#
+# .sh and .conf are here because deploy/ and cron/ are BOTH served as-is by the
+# rules above (deploy/ is a passthrough, cron/ is deliberately reachable so the
+# host crontab can trigger subscription-notices.php over HTTP). Without this,
+# deploy/docker-entrypoint.sh, deploy/nginx/*.conf and cron/backup.sh could all
+# be downloaded in plaintext by anyone.
 <IfModule mod_authz_core.c>
-    <FilesMatch "\.(sql|md|yml|yaml|lock|json|example)$">
+    <FilesMatch "\.(sql|md|yml|yaml|lock|json|example|sh|conf)$">
         Require all denied
     </FilesMatch>
 </IfModule>

@@ -368,7 +368,7 @@ $baseUrl = rtrim(getenv('APP_BASE_URL') ?: 'https://system.shehita.co.tz', '/');
             </div>
 
             <div class="field">
-                <label>Company logo</label>
+                <label for="logo">Company logo</label>
                 <label class="drop" for="logo">
                     <img id="logoPreview" alt="Logo preview">
                     <div class="icon" id="dropIcon">&#128247;</div>

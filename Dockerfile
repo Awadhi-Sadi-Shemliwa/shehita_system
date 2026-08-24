@@ -61,3 +61,15 @@ RUN if [ -f composer.lock ]; then \
     else \
         echo "No composer.lock present - skipping dependency install."; \
     fi
+
+# Apache serves as www-data, but the repo is bind-mounted over /var/www/html and
+# arrives owned by the host user that cloned it. The entrypoint hands uploads/
+# to www-data before Apache starts, so signup.php can create each new company's
+# uploads/tenants/<slug>/ folder. Without it every signup fails at mkdir.
+#
+# The base image declares no ENTRYPOINT, so CMD must be restated here -- setting
+# ENTRYPOINT alone would leave the container with nothing to run.
+COPY deploy/docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
+RUN chmod +x /usr/local/bin/docker-entrypoint.sh
+ENTRYPOINT ["/usr/local/bin/docker-entrypoint.sh"]
+CMD ["apache2-foreground"]

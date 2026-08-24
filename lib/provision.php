@@ -174,10 +174,18 @@ function provision_tenant(mysqli $control, array $input): array
         $tenantConn->close();
 
     } catch (Throwable $e) {
-        error_log('provision_tenant failed for ' . $slug . ': ' . $e->getMessage());
+        // The real reason stays out of the browser: /signup is unauthenticated,
+        // and these messages carry filesystem paths and SQL. The reference code
+        // is the bridge -- it appears on the page AND in the log line, so a
+        // failure a customer reports can be found with one grep instead of
+        // guessing which of a dozen steps broke.
+        $ref = strtoupper(bin2hex(random_bytes(3)));
+
+        error_log("provision_tenant failed for {$slug} [ref {$ref}]: " . $e->getMessage());
         provision_rollback($control, $createdTenantId, $createdDatabase ? $dbName : '', $createdLogoPath);
 
-        return $fail('We could not finish setting up your system. Nothing was saved — please try again.');
+        return $fail('We could not finish setting up your system. Nothing was saved — please try again. '
+                   . "If it keeps happening, quote reference {$ref} to SHEHITA support.");
     }
 
     $base = rtrim(getenv('APP_BASE_URL') ?: 'https://system.shehita.co.tz', '/');
