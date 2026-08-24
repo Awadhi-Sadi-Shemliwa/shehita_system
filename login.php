@@ -7,7 +7,10 @@
  * ENHANCED: Maintains all existing session and permission loading logic
  */
 
-session_start();
+// Multi-tenant bootstrap: resolves which company this URL belongs to, opens a
+// session scoped to that company, and defines TENANT_DB for config.php.
+// This REPLACES session_start() -- the session must be scoped before it starts.
+require_once __DIR__ . '/bootstrap.php';
 
 // Redirect if already logged in
 if (isset($_SESSION['email'])) {
@@ -21,38 +24,51 @@ $conn = require_once 'config.php';
 $error = '';
 $preserved_email = '';
 
-// Determine logo path - dynamic based on current directory
-$logo_path = '';
-$possible_logo_paths = [
-    'uploads/systemlogo/shehita-logo.jpg',
-    'uploads/systemlogo/Shehita_Logo.jpg',
-    'uploads/systemlogo/Shehita_Logo.jpeg',
-    'uploads/systemlogo/logo.png',
-    'uploads/systemlogo/logo.jpg'
-];
-
-foreach ($possible_logo_paths as $path) {
-    if (file_exists($path)) {
-        $logo_path = $path;
-        break;
-    }
-    // Also check with ../ prefix
-    if (file_exists('../' . $path)) {
-        $logo_path = '../' . $path;
-        break;
-    }
-}
-
-// If no logo found, use text fallback
-$logo_exists = !empty($logo_path);
+// This company's logo and display name. tenant_logo_url() (lib/theme.php)
+// replaces the hard-coded file_exists() probe that used to be duplicated
+// verbatim in login/homepage/forgotpassword/aboutus.
+$logo_path    = tenant_logo_url();
+$logo_exists  = $logo_path !== '';
+$company_name = tenant_display_name();
+$product_name = tenant_product_name();
 
 // Handle login
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['login'])) {
+/**
+ * Throttle sign-in attempts.
+ *
+ * Mirrors what forgotpassword.php already does. Without it this form accepted
+ * unlimited guesses at a known email address as fast as they could be sent.
+ *
+ * Per-session rather than per-IP: an attacker can drop the cookie, so this is a
+ * speed bump, not a wall. It is paired with the deliberately vague "Invalid
+ * email or password" message, which is what stops the form being used to
+ * discover which addresses exist.
+ */
+$login_lockout_seconds = 900;   // 15 minutes
+$login_max_attempts    = 8;
+
+if (!empty($_SESSION['login_locked_until']) && $_SESSION['login_locked_until'] > time()) {
+    $wait  = (int)ceil(($_SESSION['login_locked_until'] - time()) / 60);
+    $error = "Too many failed sign-in attempts. Please wait {$wait} "
+           . ($wait === 1 ? 'minute' : 'minutes') . " and try again.";
+} elseif ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['login'])) {
     $email = trim($_POST['email']);
     $password = $_POST['password'];
     $preserved_email = htmlspecialchars($email);
     
     $errors = [];
+
+    // Only a wrong email/password counts towards the lockout. Validation slips
+    // and expired CSRF tokens do not: a user whose session cookie was cleared
+    // would otherwise be locked out for 15 minutes by repeatedly submitting a
+    // stale token, having never typed a wrong password.
+    $credential_failure = false;
+
+    // CSRF: this form previously had no token at all, so any other site could
+    // silently submit it on a visitor's behalf.
+    if (!csrf_check($_POST['csrf_token'] ?? null)) {
+        $errors[] = "Your session expired. Please try again.";
+    }
     
     if (empty($email)) {
         $errors[] = "Email address is required";
@@ -75,6 +91,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['login'])) {
             
             if (password_verify($password, $user['password'])) {
                 if ($user['status'] === 'Active') {
+                    // Issue a fresh session id now that this session is
+                    // privileged. Without this, an id planted before sign-in
+                    // (session fixation) would still be valid afterwards.
+                    // Must happen BEFORE anything is written to the session.
+                    session_regenerate_id(true);
+
+                    unset($_SESSION['login_attempts'], $_SESSION['login_locked_until']);
+
                     // Set session variables
                     $_SESSION['user_id'] = $user['id'];
                     $_SESSION['name'] = $user['name'];
@@ -88,19 +112,33 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['login'])) {
                     header("Location: homepage.php?page=home");
                     exit();
                 } else {
+                    // Correct password, but a disabled account. Still worth
+                    // throttling: it is a valid credential pair being tried.
                     $errors[] = "Your account is inactive. Please contact the administrator.";
+                    $credential_failure = true;
                 }
             } else {
                 $errors[] = "Invalid email or password";
+                $credential_failure = true;
             }
         } else {
             $errors[] = "Invalid email or password";
+            $credential_failure = true;
         }
         $stmt->close();
     }
     
     if (!empty($errors)) {
         $error = implode("<br>", $errors);
+
+        if ($credential_failure) {
+            $_SESSION['login_attempts'] = (int)($_SESSION['login_attempts'] ?? 0) + 1;
+        }
+        if ($credential_failure && $_SESSION['login_attempts'] >= $login_max_attempts) {
+            $_SESSION['login_locked_until'] = time() + $login_lockout_seconds;
+            $_SESSION['login_attempts'] = 0;
+            $error = 'Too many failed sign-in attempts. Please wait 15 minutes and try again.';
+        }
     }
 }
 ?>
@@ -109,7 +147,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['login'])) {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>SHEHITA EMS - Login</title>
+    <title><?= htmlspecialchars($product_name) ?> - Login</title>
     <?php if ($logo_exists): ?>
     <link rel="icon" href="<?= htmlspecialchars($logo_path) ?>">
     <?php endif; ?>
@@ -152,7 +190,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['login'])) {
             display: flex;
             align-items: center;
             justify-content: center;
-            background: linear-gradient(135deg, #3e2b1f 0%, #7b583f 50%, #b89b7e 100%);
+            background: linear-gradient(135deg, var(--brown-900) 0%, var(--brown-700) 50%, var(--brown-500) 100%);
             padding: 20px;
             font-family: 'Inter', sans-serif;
         }
@@ -377,6 +415,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['login'])) {
             }
         }
     </style>
+    <?php echo tenant_theme_css(); ?>
 </head>
 <body>
     <div class="container">
@@ -384,9 +423,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['login'])) {
             <!-- Logo Container - White Background (matching homepage.php) -->
             <div class="logo-container">
                 <?php if ($logo_exists): ?>
-                    <img src="<?= htmlspecialchars($logo_path) ?>" alt="SHEHITA" class="logo">
+                    <img src="<?= htmlspecialchars($logo_path) ?>" alt="<?= htmlspecialchars($company_name) ?>" class="logo">
                 <?php else: ?>
-                    <div class="logo-text">SHEHITA</div>
+                    <div class="logo-text"><?= htmlspecialchars($company_name) ?></div>
                     <span class="logo-sub">Enterprise Management System</span>
                 <?php endif; ?>
             </div>
@@ -399,7 +438,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['login'])) {
                 </div>
             <?php endif; ?>
             
-            <form method="POST" action="<?= htmlspecialchars($_SERVER['PHP_SELF']) ?>">
+            <!--
+                No action attribute: the form posts back to the current URL.
+
+                It previously used $_SERVER['PHP_SELF'], which under the
+                multi-tenant rewrite returns the REWRITTEN path (/login.php)
+                rather than the requested one (/acmetraders/login.php). The
+                company prefix was dropped, so the login POST arrived with no
+                company in the URL and bounced to /signup.php.
+
+                Anything that rebuilds this URL must use a path-relative or
+                query-only value; every other form in the app uses
+                action="?page=..." for the same reason.
+            -->
+            <form method="POST">
+                <input type="hidden" name="csrf_token" value="<?= htmlspecialchars(csrf_token()) ?>">
                 <div class="input-group">
                     <label for="email">Email Address</label>
                     <input type="email" id="email" name="email" value="<?= $preserved_email ?>" placeholder="Enter your email address" required>

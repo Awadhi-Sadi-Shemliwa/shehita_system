@@ -5,7 +5,10 @@
  * Updates session last_activity timestamp via AJAX
  */
 
-session_start();
+// Multi-tenant bootstrap: resolves which company this URL belongs to, opens a
+// session scoped to that company, and defines TENANT_DB for config.php.
+// This REPLACES session_start() -- the session must be scoped before it starts.
+require_once __DIR__ . '/bootstrap.php';
 
 // Only respond to POST requests
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {

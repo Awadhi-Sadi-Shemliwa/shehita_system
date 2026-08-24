@@ -1,3 +1,11 @@
+# Local development stack.
+#
+# Bring it up with:   docker compose up -d --build
+# Then open:          http://localhost:8080/signup.php
+#
+# There is no default company: create one through /signup.php, which provisions
+# its own database (shems_<slug>) and starts a 14-day trial.
+
 services:
   web:
     build: .
@@ -5,14 +13,39 @@ services:
       - "8080:80"
     volumes:
       - .:/var/www/html
+      # Keeps the vendor/ directory installed during the image build visible.
+      # Without this the bind mount above hides it and the Anthropic SDK
+      # disappears at runtime.
+      - /var/www/html/vendor
     environment:
       APP_ENV: development          # show errors on screen locally
+      APP_BASE_URL: http://localhost:8080
+      APP_TIMEZONE: Africa/Dar_es_Salaam
+
       DB_HOST: db
       DB_USER: root
       DB_PASSWORD: rootpass
-      DB_NAME: if0_41659126_db_business
-      ADMIN_DEFAULT_EMAIL: admin@example.com
-      ADMIN_DEFAULT_PASSWORD: changeme123   # local-only default; not used in production
+      CONTROL_DB_NAME: shehita_control
+
+      # Free trial length for new companies, snapshotted per company at signup.
+      TRIAL_DAYS: 14
+
+      # SHEHITA's own admin console at /admin/. Seeded on first request.
+      PLATFORM_ADMIN_EMAIL: admin@shehita.co.tz
+      PLATFORM_ADMIN_PASSWORD: changeme123
+      BILLING_ADMIN_EMAILS: admin@shehita.co.tz
+
+      # Locally every email is written to the container log instead of being
+      # sent, so you can copy the payment-confirmation link straight out of
+      # `docker compose logs web`.
+      MAIL_DRIVER: log
+      MAIL_FROM: "SHEHITA EMS <no-reply@shehita.co.tz>"
+
+      # Protects cron/subscription-notices.php.
+      CRON_KEY: local-dev-cron-key
+
+      # AI assistant. Leave empty to disable it locally.
+      ANTHROPIC_API_KEY: ""
     depends_on:
       db:
         condition: service_healthy

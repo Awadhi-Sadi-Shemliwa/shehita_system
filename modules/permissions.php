@@ -356,6 +356,11 @@ if (isset($_POST['perm_add']) && !canAdd($conn, $user_role_id, $module_name)) {
             if ($insert_stmt->execute()) {
                 $permissions_message = "Permission added successfully!";
                 $permissions_message_type = "success";
+
+                // Every user cached these permissions in their session;
+                // bump the version so their next request rebuilds it.
+                permissions_bump_version($conn);
+
             } else {
                 $permissions_message = "Error adding permission: " . $conn->error;
                 $permissions_message_type = "danger";
@@ -406,6 +411,11 @@ if (isset($_POST['perm_update']) && !canEdit($conn, $user_role_id, $module_name)
                 if ($update_stmt->execute()) {
                     $permissions_message = "Permission updated successfully!";
                     $permissions_message_type = "success";
+
+                    // Every user cached these permissions in their session;
+                    // bump the version so their next request rebuilds it.
+                    permissions_bump_version($conn);
+
                 } else {
                     $permissions_message = "Error updating permission: " . $conn->error;
                     $permissions_message_type = "danger";
@@ -448,6 +458,11 @@ if (isset($_GET['perm_delete']) && !canDelete($conn, $user_role_id, $module_name
             if ($delete_stmt->execute()) {
                 $permissions_message = "Permission deleted successfully!";
                 $permissions_message_type = "success";
+
+                // Every user cached these permissions in their session;
+                // bump the version so their next request rebuilds it.
+                permissions_bump_version($conn);
+
                 
                 // Check if table is empty and reset auto-increment
                 $check_empty = $conn->query("SELECT COUNT(*) as count FROM permissions");

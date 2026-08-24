@@ -1,0 +1,13 @@
+{
+    "name": "shehita/ems",
+    "description": "SHEHITA Enterprise Management System - multi-tenant SaaS",
+    "type": "project",
+    "require": {
+        "php": ">=8.2",
+        "anthropic-ai/sdk": "^0.43"
+    },
+    "config": {
+        "optimize-autoloader": true,
+        "sort-packages": true
+    }
+}

@@ -158,12 +158,32 @@ $stmt->close();
 
 /**
  * ============================================================================
- * ENSURE ALL USERS HAVE VALID DEPARTMENT AND ROLE
- * Set default department (Administrator ID=1) and role (Super Admin ID=1) for any null values
+ * ENSURE ALL USERS HAVE A DEPARTMENT
  * ============================================================================
+ *
+ * SECURITY — do NOT restore the role half of this.
+ *
+ * This block used to also run:
+ *     UPDATE users SET role_id = 1 WHERE role_id IS NULL AND id != 1
+ *
+ * role_id = 1 is Super Admin. users.role_id is a foreign key declared
+ * ON DELETE SET NULL, so deleting any role set every one of its members'
+ * role_id to NULL — and then the next person to open this page silently
+ * promoted all of them to Super Admin. Deleting a junior role handed its
+ * staff full administrative access, with nothing in the interface saying so.
+ *
+ * A user with no role now simply has no permissions: hasPermission() returns
+ * false for a NULL role, so they can sign in but every module reports access
+ * denied until an administrator assigns them one. They are listed below as
+ * "No role assigned" so they are visible rather than silently broken.
+ *
+ * modules/roles.php now also refuses to delete a role that still has members,
+ * so this state should be rare.
+ *
+ * Department is different: it carries no privilege on its own (permissions are
+ * keyed on role), and the add/edit form needs one to populate its role list.
  */
 $conn->query("UPDATE users SET department_id = 1 WHERE department_id IS NULL AND id != 1");
-$conn->query("UPDATE users SET role_id = 1 WHERE role_id IS NULL AND id != 1");
 
 /**
  * ============================================================================

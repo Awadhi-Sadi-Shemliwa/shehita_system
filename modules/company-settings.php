@@ -80,8 +80,15 @@ if ($count > 1) {
 $company_message = '';
 $company_message_type = '';
 
-// Upload directory for logos
-$upload_dir = 'uploads/company/';
+// Upload directory for logos -- SCOPED TO THIS COMPANY.
+//
+// This used to be one shared 'uploads/company/' folder for everyone, with
+// filenames built only from date('Ymd_His'). Under multi-tenancy that meant two
+// companies saving in the same second silently overwrote each other's logo, and
+// every company's logo sat in a directory every other company also wrote to.
+$upload_dir = defined('TENANT_SLUG')
+    ? 'uploads/tenants/' . TENANT_SLUG . '/'
+    : 'uploads/company/';
 $full_upload_path = __DIR__ . '/../' . $upload_dir;
 
 // Create upload directory if it doesn't exist
@@ -94,27 +101,51 @@ if (!file_exists($full_upload_path)) {
  * HELPER FUNCTION: Delete old logo file
  * ============================================================================
  */
+/**
+ * Delete a logo file belonging to THIS company.
+ *
+ * SECURITY: the path is resolved and then checked to be inside this company's
+ * own upload directory before anything is unlinked.
+ *
+ * The previous version took a caller-supplied path, ran `ltrim($path, './')` on
+ * it, and tried four different prefixes, unlinking whatever existed. Because the
+ * value came straight from $_POST['existing_logo'], any company administrator
+ * could delete any writable file the web server could reach -- including other
+ * companies' logos. `ltrim` does not remove a `../` that follows a real
+ * directory name, so `uploads/../something` walked straight out of the folder.
+ *
+ * Callers must now pass a path that came from the DATABASE, not from the
+ * request; this containment check is the second line of defence, not the first.
+ */
 function deleteOldLogo($logo_url) {
-    if (empty($logo_url)) {
+    if (empty($logo_url) || !is_string($logo_url)) {
         return;
     }
-    
-    // Remove any leading slash or ../ from path
-    $clean_path = ltrim($logo_url, './');
-    
-    // Try different path variations
-    $paths_to_check = [
-        __DIR__ . '/../' . $clean_path,           // Relative from project root
-        $clean_path,                               // Direct path
-        __DIR__ . '/' . $clean_path,               // From current directory
-        '../' . $clean_path                         // One level up
-    ];
-    
-    foreach ($paths_to_check as $path) {
-        if (file_exists($path) && is_file($path)) {
-            @unlink($path);
-        }
+
+    // The only directory this company is allowed to delete from.
+    $baseDir = realpath(__DIR__ . '/../' . (defined('TENANT_SLUG')
+        ? 'uploads/tenants/' . TENANT_SLUG
+        : 'uploads/company'));
+
+    if ($baseDir === false) {
+        return;
     }
+
+    $candidate = realpath(__DIR__ . '/../' . ltrim($logo_url, '/'));
+
+    if ($candidate === false || !is_file($candidate)) {
+        return;
+    }
+
+    // realpath() has resolved every '..' and symlink, so a simple prefix test is
+    // now sound. The separator guards against '/uploads/tenants/acme-evil'
+    // matching a base of '/uploads/tenants/acme'.
+    if (!str_starts_with($candidate, $baseDir . DIRECTORY_SEPARATOR)) {
+        error_log('deleteOldLogo: refusing to delete outside the company folder: ' . $candidate);
+        return;
+    }
+
+    @unlink($candidate);
 }
 
 /**
@@ -136,6 +167,16 @@ if (isset($_POST['company_update']) && !canEdit($conn, $user_role_id, $module_na
     $company_tin = sanitize($conn, $_POST['company_tin']);
     $vrn_number = sanitize($conn, $_POST['vrn_number']);
     $currency_symbol = sanitize($conn, $_POST['currency_symbol']);
+
+    // BRAND COLOUR
+    // Colours are derived from the uploaded logo at signup, which is right most
+    // of the time but not always -- a logo can be mostly one colour while the
+    // company thinks of itself as another. This lets them correct it.
+    //
+    // Stored in the CONTROL database on the tenants row, not in company_settings,
+    // because bootstrap.php has to read the palette before it connects to this
+    // company's own database.
+    $brand_choice = trim((string)($_POST['brand_primary'] ?? ''));
     $logo_data = isset($_POST['cropped_image_data']) ? $_POST['cropped_image_data'] : '';
     
     // Handle existing logo URL if no new image uploaded
@@ -179,8 +220,19 @@ if (isset($_POST['company_update']) && !canEdit($conn, $user_role_id, $module_na
         $errors[] = "Currency symbol is required";
     }
     
-    // Handle logo upload
-    $logo_url = $existing_logo;
+    // Handle logo upload.
+    //
+    // $_POST['existing_logo'] only tells us whether the user KEPT or CLEARED the
+    // current logo -- it is never used as a filesystem path. The actual path
+    // always comes from the database.
+    $keep_existing_logo = trim((string)$existing_logo) !== '';
+
+    $current_logo_row = $conn->query("SELECT logo_url FROM company_settings LIMIT 1");
+    $current_logo_url = ($current_logo_row && $current_logo_row->num_rows > 0)
+        ? (string)$current_logo_row->fetch_assoc()['logo_url']
+        : '';
+
+    $logo_url = $keep_existing_logo ? $current_logo_url : '';
     
     if (!empty($logo_data) && strpos($logo_data, 'data:image/') === 0) {
         // Process base64 image upload
@@ -210,9 +262,16 @@ if (isset($_POST['company_update']) && !canEdit($conn, $user_role_id, $module_na
                 // surface the exact PHP error if it still fails (e.g. disk full).
                 $bytes_written = @file_put_contents($filepath, $image_base64);
                 if ($bytes_written !== false && $bytes_written > 0) {
-                    // Delete old logo if it exists
-                    if (!empty($existing_logo)) {
-                        deleteOldLogo($existing_logo);
+                    // Delete the previous logo, using the path RECORDED IN THE
+                    // DATABASE -- never $_POST['existing_logo']. The posted value
+                    // is attacker-controlled and was previously handed straight
+                    // to unlink().
+                    $prev = $conn->query("SELECT logo_url FROM company_settings LIMIT 1");
+                    if ($prev && $prev->num_rows > 0) {
+                        $prevLogo = (string)$prev->fetch_assoc()['logo_url'];
+                        if ($prevLogo !== '' && $prevLogo !== $upload_dir . $filename) {
+                            deleteOldLogo($prevLogo);
+                        }
                     }
                     $logo_url = $upload_dir . $filename;
                 } else {
@@ -277,11 +336,51 @@ if (isset($_POST['company_update']) && !canEdit($conn, $user_role_id, $module_na
             }
             $insert_stmt->close();
         }
+
+        // Persist the brand colour to the CONTROL database, where bootstrap.php
+        // reads it. Regenerating the ramp here rather than storing loose hex
+        // values means the contrast guard in brand_ramp() still applies -- a
+        // company that picks bright yellow still gets a readable navbar.
+        if ($brand_choice !== '' && defined('TENANT_ID')) {
+            require_once __DIR__ . '/../lib/brand.php';
+            require_once __DIR__ . '/../lib/control_db.php';
+
+            if (hex_to_rgb($brand_choice) !== null) {
+                $cs_palette = brand_ramp(strtolower($brand_choice));
+                $cs_json    = json_encode($cs_palette, JSON_UNESCAPED_SLASHES);
+                $cs_primary = $cs_palette['primary'];
+                $cs_control = control_db();
+                $cs_tid     = TENANT_ID;
+
+                $cs_stmt = $cs_control->prepare(
+                    "UPDATE tenants SET brand_primary = ?, brand_ramp = ? WHERE id = ?"
+                );
+                $cs_stmt->bind_param("ssi", $cs_primary, $cs_json, $cs_tid);
+                $cs_stmt->execute();
+                $cs_stmt->close();
+
+                // The page around this module was already rendered with the old
+                // palette, so tell the user rather than leaving them wondering
+                // why nothing looks different yet.
+                $company_message .= " Your brand colour was updated — reload the page to see it applied.";
+            } else {
+                $company_message .= " (The brand colour was not a valid hex value like #7b583f, so it was left unchanged.)";
+            }
+        }
     } else {
         $company_message = implode("<br>", $errors);
         $company_message_type = "danger";
     }
 }
+
+/**
+ * Current brand palette, for the colour picker below. Read from the control
+ * database via lib/theme.php so it always matches what the pages actually use.
+ */
+require_once __DIR__ . '/../lib/theme.php';
+$cs_current      = tenant_palette();
+$cs_ramp         = $cs_current['ramp'];
+$cs_brand_primary = (string)($cs_current['primary'] ?? '#7b583f');
 
 /**
  * ============================================================================
@@ -1261,6 +1360,34 @@ window.updateCompanyLanguage = updateCompanyLanguage;
                             <span id="company_currencySymbolErrorText" data-company-lang="currencyRequired">Currency symbol is required</span>
                         </div>
                     </div>
+                    <!-- Brand Colour -->
+                    <div class="company-form-group">
+                        <label for="brand_primary" class="company-form-label">Brand Colour</label>
+                        <div style="display:flex;gap:10px;align-items:center;">
+                            <input type="color" id="brand_primary_picker"
+                                   value="<?= htmlspecialchars($cs_brand_primary) ?>"
+                                   style="width:52px;height:42px;padding:3px;border:1.5px solid var(--brown-200);
+                                          border-radius:8px;cursor:pointer;background:#fff;">
+                            <input type="text" id="brand_primary" name="brand_primary"
+                                   class="company-form-control"
+                                   value="<?= htmlspecialchars($cs_brand_primary) ?>"
+                                   maxlength="7" pattern="#[0-9a-fA-F]{6}" placeholder="#7b583f"
+                                   style="flex:1;">
+                        </div>
+                        <div style="font-size:.8rem;color:var(--gray-500);margin-top:6px;line-height:1.5;">
+                            Taken from your logo when you signed up. Change it here if it is not quite
+                            your brand — the whole system re-colours from this one value.
+                        </div>
+                        <div style="margin-top:9px;display:flex;gap:3px;align-items:center;">
+                            <span style="font-size:.78rem;color:var(--gray-500);margin-right:5px;">Preview:</span>
+                            <?php foreach ([900,800,700,600,500,400,300,200,100] as $cs_step): ?>
+                                <span id="cs_swatch_<?= $cs_step ?>" title="<?= $cs_step ?>"
+                                      style="width:20px;height:20px;border-radius:4px;display:inline-block;
+                                             border:1px solid rgba(0,0,0,.12);
+                                             background:<?= htmlspecialchars($cs_ramp[$cs_step] ?? '#fff') ?>;"></span>
+                            <?php endforeach; ?>
+                        </div>
+                    </div>
                 </div>
                 
                 <!-- Company Address (Full Width) -->
@@ -1289,6 +1416,77 @@ window.updateCompanyLanguage = updateCompanyLanguage;
                     <?php endif; ?>
                 </div>
             </form>
+
+            <script>
+            // Live preview of the nine palette steps. Mirrors the lightness sweep
+            // in lib/brand.php so what you see here is what the server will store;
+            // the server still recomputes it, this is only a preview.
+            (function () {
+                var picker = document.getElementById('brand_primary_picker');
+                var field  = document.getElementById('brand_primary');
+                if (!picker || !field) { return; }
+
+                var STEPS = [900,800,700,600,500,400,300,200,100];
+                var LIGHT = [0.14,0.22,0.32,0.44,0.58,0.72,0.84,0.92,0.965];
+                var SAT   = [1.00,1.00,0.95,0.88,0.80,0.68,0.52,0.40,0.30];
+
+                function toHsl(hex) {
+                    var r = parseInt(hex.substr(1,2),16)/255,
+                        g = parseInt(hex.substr(3,2),16)/255,
+                        b = parseInt(hex.substr(5,2),16)/255;
+                    var mx = Math.max(r,g,b), mn = Math.min(r,g,b), l = (mx+mn)/2, h = 0, s = 0;
+                    if (mx !== mn) {
+                        var d = mx - mn;
+                        s = l > 0.5 ? d/(2-mx-mn) : d/(mx+mn);
+                        if (mx === r)      { h = ((g-b)/d) + (g < b ? 6 : 0); }
+                        else if (mx === g) { h = ((b-r)/d) + 2; }
+                        else               { h = ((r-g)/d) + 4; }
+                        h *= 60;
+                    }
+                    return [h, s, l];
+                }
+
+                function toHex(h, s, l) {
+                    h = ((h % 360) + 360) % 360 / 360;
+                    if (s === 0) {
+                        var v = Math.round(l*255).toString(16).padStart(2,'0');
+                        return '#' + v + v + v;
+                    }
+                    var q = l < 0.5 ? l*(1+s) : l+s-(l*s), p = 2*l-q;
+                    function ch(t) {
+                        if (t < 0) { t += 1; } if (t > 1) { t -= 1; }
+                        if (t < 1/6) { return p + (q-p)*6*t; }
+                        if (t < 1/2) { return q; }
+                        if (t < 2/3) { return p + (q-p)*(2/3-t)*6; }
+                        return p;
+                    }
+                    return '#' + [ch(h+1/3), ch(h), ch(h-1/3)]
+                        .map(function (v) { return Math.round(v*255).toString(16).padStart(2,'0'); })
+                        .join('');
+                }
+
+                function preview(hex) {
+                    if (!/^#[0-9a-fA-F]{6}$/.test(hex)) { return; }
+                    var hsl = toHsl(hex);
+                    var baseS = Math.max(0.16, Math.min(0.78, hsl[1]));
+                    STEPS.forEach(function (step, i) {
+                        var el = document.getElementById('cs_swatch_' + step);
+                        if (el) { el.style.background = toHex(hsl[0], baseS*SAT[i], LIGHT[i]); }
+                    });
+                }
+
+                picker.addEventListener('input', function () {
+                    field.value = picker.value;
+                    preview(picker.value);
+                });
+                field.addEventListener('input', function () {
+                    if (/^#[0-9a-fA-F]{6}$/.test(field.value)) {
+                        picker.value = field.value;
+                        preview(field.value);
+                    }
+                });
+            })();
+            </script>
         </div>
     </div>
     

@@ -11,7 +11,10 @@
  * REFINED: Added unique homepage_translations prefix for language switching (Issue fix)
  */
 
-session_start();
+// Multi-tenant bootstrap: resolves which company this URL belongs to, opens a
+// session scoped to that company, and defines TENANT_DB for config.php.
+// This REPLACES session_start() -- the session must be scoped before it starts.
+require_once __DIR__ . '/bootstrap.php';
 
 // ============================================================
 // SESSION TIMEOUT CHECK - Server-side validation
@@ -40,6 +43,26 @@ $_SESSION['last_activity'] = time();
 // Check if user is logged in
 if (!isset($_SESSION['email'])) {
     header("Location: login.php");
+    exit();
+}
+
+// ============================================================
+// SUBSCRIPTION GATE
+// ============================================================
+// This file is the ONLY shell for all 17 modules -- every authenticated page is
+// homepage.php?page=<module> -- so one check here covers the whole application,
+// including someone typing ?page=invoice directly.
+//
+// $SUBSCRIPTION comes from bootstrap.php via subscription_resolve(), the same
+// pure function that renders the "trial ends in N days" banner below. Because
+// the banner and this gate read one resolver, they cannot disagree.
+//
+// Everyone can still LOG IN when expired; it is this redirect that decides what
+// they see. The company's own admin (role_id = 1) is sent to the billing page so
+// they can see what to pay and record it; everyone else gets a notice page.
+if (!$SUBSCRIPTION['is_active']) {
+    $is_company_admin = (int)($_SESSION['role_id'] ?? 0) === 1;
+    header('Location: ' . ($is_company_admin ? 'billing.php' : 'expired.php'));
     exit();
 }
 
@@ -107,37 +130,18 @@ if ($user_id > 0) {
 $display_role = isset($_SESSION['role_name']) ? $_SESSION['role_name'] : (isset($_SESSION['role_id']) ? 'User' : 'User');
 $display_department = isset($_SESSION['department_name']) ? $_SESSION['department_name'] : (isset($_SESSION['department_id']) ? 'General' : 'General');
 
-// Determine logo path - dynamic based on current directory
-$logo_path = '';
-$possible_logo_paths = [
-    'uploads/systemlogo/shehita-logo.jpg',
-    'uploads/systemlogo/Shehita_Logo.jpg',
-    'uploads/systemlogo/Shehita_Logo.jpeg',
-    'uploads/systemlogo/logo.png',
-    'uploads/systemlogo/logo.jpg'
-];
-
-foreach ($possible_logo_paths as $path) {
-    if (file_exists($path)) {
-        $logo_path = $path;
-        break;
-    }
-    // Also check with ../ prefix
-    if (file_exists('../' . $path)) {
-        $logo_path = '../' . $path;
-        break;
-    }
-}
-
-// If no logo found, use default text fallback
-$logo_exists = !empty($logo_path);
+// This company's logo and display name (lib/theme.php).
+$logo_path    = tenant_logo_url();
+$logo_exists  = $logo_path !== '';
+$company_name = tenant_display_name();
+$product_name = tenant_product_name();
 ?>
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>SHEHITA EMS | <?= ucfirst(str_replace('-', ' ', $current_page)) ?></title>
+    <title><?= htmlspecialchars($product_name) ?> | <?= ucfirst(str_replace('-', ' ', $current_page)) ?></title>
     <?php if ($logo_exists): ?>
     <link rel="icon" href="<?= htmlspecialchars($logo_path) ?>">
     <?php endif; ?>
@@ -269,7 +273,7 @@ $logo_exists = !empty($logo_path);
             font-family: 'Montserrat', sans-serif;
             font-size: 20px;
             font-weight: 800;
-            background: linear-gradient(135deg, #d4bfa8 0%, #b89b7e 100%);
+            background: linear-gradient(135deg, var(--brown-400) 0%, var(--brown-500) 100%);
             -webkit-background-clip: text;
             -webkit-text-fill-color: transparent;
             background-clip: text;
@@ -540,7 +544,7 @@ $logo_exists = !empty($logo_path);
             left: -280px;
             width: 280px;
             height: calc(100% - var(--navbar-height));
-            background: linear-gradient(180deg, #2a1f18 0%, #1e1610 100%);
+            background: var(--navbar-bg);
             z-index: 1000;
             overflow-y: auto;
             transition: left 0.3s cubic-bezier(0.4, 0, 0.2, 1);
@@ -631,6 +635,30 @@ $logo_exists = !empty($logo_path);
         }
 
         /* Main Content Area */
+        /* Subscription countdown banner. Shown only inside the last week of a
+           trial or paid period, from the same subscription_resolve() state that
+           drives the lockout -- so it can never say "3 days left" while the
+           system is actually locking people out. */
+        .sub-banner {
+            display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+            padding: 11px 18px; border-radius: 10px; margin-bottom: 18px;
+            font-size: .92rem; line-height: 1.5;
+            background: var(--warning-bg); border-left: 3px solid var(--warning-border);
+            color: var(--warning-text);
+        }
+        .sub-banner.urgent { background: #fee2e2; border-left-color: #dc2626; color: #991b1b; }
+        .sub-banner .grow { flex: 1; }
+        .sub-banner a.act {
+            padding: 7px 15px; border-radius: 7px; background: var(--brown-700); color: #fff;
+            text-decoration: none; font-weight: 600; font-size: .87rem; white-space: nowrap;
+        }
+        .sub-banner a.act:hover { background: var(--brown-800); }
+        .sub-banner button.dismiss {
+            background: none; border: none; cursor: pointer; color: inherit;
+            font-size: 1.1rem; opacity: .6; padding: 0 4px;
+        }
+        .sub-banner button.dismiss:hover { opacity: 1; }
+
         .main-content {
             min-height: calc(100vh - var(--navbar-height));
             padding: 24px 32px;
@@ -921,6 +949,7 @@ $logo_exists = !empty($logo_path);
             }
         }
     </style>
+    <?php echo tenant_theme_css(); ?>
 </head>
 <body>
     <!-- Timeout Modal -->
@@ -961,11 +990,11 @@ $logo_exists = !empty($logo_path);
             <a href="?page=home" class="navbar-logo">
                 <?php if ($logo_exists): ?>
                     <div class="navbar-logo-wrapper">
-                        <img src="<?= htmlspecialchars($logo_path) ?>" alt="SHEHITA EMS" class="navbar-logo-img">
+                        <img src="<?= htmlspecialchars($logo_path) ?>" alt="<?= htmlspecialchars($product_name) ?>" class="navbar-logo-img">
                     </div>
                 <?php else: ?>
                     <div>
-                        <div class="navbar-logo-text">SHEHITA EMS</div>
+                        <div class="navbar-logo-text"><?= htmlspecialchars($product_name) ?></div>
                         <div class="navbar-logo-sub">Enterprise Management System</div>
                     </div>
                 <?php endif; ?>
@@ -1246,6 +1275,52 @@ $logo_exists = !empty($logo_path);
 
     <!-- Main Content -->
     <main class="main-content">
+
+        <?php
+        // Warn before access is lost, not after. Only the company's own admin
+        // gets the "Renew" button, because only they can act on it.
+        $sub_days = (int)$SUBSCRIPTION['days_left'];
+        if ($SUBSCRIPTION['is_active'] && $sub_days <= 7):
+            $sub_urgent    = $sub_days <= 2;
+            $sub_is_admin  = (int)($_SESSION['role_id'] ?? 0) === 1;
+            $sub_banner_id = 'subbanner-' . TENANT_SLUG . '-' . ($SUBSCRIPTION['ends_at']
+                ? $SUBSCRIPTION['ends_at']->format('Ymd') : 'x');
+        ?>
+        <div class="sub-banner <?= $sub_urgent ? 'urgent' : '' ?>" id="<?= htmlspecialchars($sub_banner_id) ?>" hidden>
+            <span class="grow">
+                <strong><?= htmlspecialchars($SUBSCRIPTION['in_trial'] ? 'Free trial ending' : 'Subscription ending') ?>:</strong>
+                <?= htmlspecialchars(subscription_summary($SUBSCRIPTION)) ?>
+                <?php if (!$sub_is_admin): ?>
+                    Please ask your administrator to arrange payment.
+                <?php endif; ?>
+            </span>
+            <?php if ($sub_is_admin): ?>
+                <a class="act" href="billing.php">Renew now</a>
+            <?php endif; ?>
+            <button class="dismiss" type="button" aria-label="Dismiss">&times;</button>
+        </div>
+
+        <script>
+        // Dismissal is remembered per company AND per end-date, so renewing (or
+        // slipping another day closer) shows the banner again rather than
+        // leaving it silently hidden.
+        (function () {
+            var el = document.getElementById(<?= json_encode($sub_banner_id) ?>);
+            if (!el) { return; }
+            var key = 'dismissed:' + el.id;
+            try {
+                if (localStorage.getItem(key) !== '1') { el.hidden = false; }
+            } catch (e) {
+                el.hidden = false;   // private mode / storage blocked: still warn them
+            }
+            el.querySelector('.dismiss').addEventListener('click', function () {
+                el.hidden = true;
+                try { localStorage.setItem(key, '1'); } catch (e) {}
+            });
+        })();
+        </script>
+        <?php endif; ?>
+
         <?php if (!$can_view_current_page): ?>
             <div class="permission-denied">
                 <i class="fas fa-lock"></i>
@@ -1268,6 +1343,12 @@ $logo_exists = !empty($logo_path);
             </div>
         <?php endif; ?>
     </main>
+
+    <?php
+    // The AI assistant. Renders nothing unless it is configured and enabled for
+    // this company, so there is never a bubble that only produces an error.
+    include __DIR__ . '/partials/ai-assistant.php';
+    ?>
 
     <script>
         // ============================================================

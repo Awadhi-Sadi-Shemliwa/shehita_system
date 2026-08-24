@@ -1,0 +1,23 @@
+# Everything under uploads/ is content supplied by users: company logos,
+# profile photos. It must be served, never executed.
+#
+# Company logos in particular arrive through signup.php as base64 from an
+# untrusted browser and are written with a .jpg name regardless of what the
+# bytes actually are, so a PHP payload reaching this directory is a realistic
+# failure mode rather than a theoretical one.
+
+php_flag engine off
+
+<FilesMatch "\.(php|phtml|phps|php[0-9]|phar|cgi|pl|py|sh|htaccess)$">
+    <IfModule mod_authz_core.c>
+        Require all denied
+    </IfModule>
+    <IfModule !mod_authz_core.c>
+        Order allow,deny
+        Deny from all
+    </IfModule>
+</FilesMatch>
+
+<IfModule mod_rewrite.c>
+    RewriteEngine Off
+</IfModule>

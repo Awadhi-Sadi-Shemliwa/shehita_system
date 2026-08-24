@@ -1,0 +1,73 @@
+# SHEHITA EMS — path-based multi-tenant routing
+#
+# Every client company lives under its own path on the SAME domain:
+#
+#     https://system.shehita.co.tz/acmetraders/login.php
+#     https://system.shehita.co.tz/arc/homepage.php?page=home
+#
+# This is why the system uses a path rather than a subdomain per client: adding
+# a company needs no DNS record and no certificate, so signup can be instant.
+#
+# The rules below strip the leading /<slug>/ and hand the slug to PHP through
+# the TENANT environment variable, which arrives as $_SERVER['REDIRECT_TENANT'].
+# Apache sets it, so a visitor cannot forge it via a query string.
+#
+# Relative links keep working untouched: the browser resolves "homepage.php"
+# against /acmetraders/, which these rules then map back to /homepage.php.
+#
+# Requires mod_rewrite + AllowOverride All (both enabled in the Dockerfile).
+
+Options -Indexes
+DirectoryIndex index.php
+
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+
+    # ---- Never serve include-only code ------------------------------------
+    # FIRST, before anything else, and again after the tenant rewrite below.
+    #
+    # modules/*.php expect a session and $conn to already exist; their own
+    # "prevent direct access" guard is an empty if-body and blocks nothing. lib/
+    # and partials/ are includes too, and tests/ must never run over HTTP.
+    #
+    # This must come BEFORE the passthrough rules: a passthrough ends with [L],
+    # which would stop rewrite processing and skip this check entirely.
+    #
+    # cron/ is deliberately absent -- subscription-notices.php is triggered over
+    # HTTP by the host crontab and protects itself with CRON_KEY.
+    RewriteRule ^(lib|partials|modules|tests)(/|$) - [F]
+
+    # ---- Never treat these as company names -------------------------------
+    # Platform pages and real asset directories are served as-is.
+    RewriteRule ^(signup|admin|cron|ai|health)(/|$) - [L]
+    RewriteRule ^(uploads|deploy|vendor)(/|$)       - [L]
+
+    # ---- Already-resolved requests ----------------------------------------
+    # If the path maps to a real file or directory at the web root, serve it.
+    RewriteCond %{REQUEST_FILENAME} -f [OR]
+    RewriteCond %{REQUEST_FILENAME} -d
+    RewriteRule ^ - [L]
+
+    # ---- /<slug>  ->  that company's login page ---------------------------
+    RewriteRule ^([a-z0-9][a-z0-9-]{1,38})/?$ login.php [E=TENANT:$1,QSA,L]
+
+    # ---- /<slug>/anything  ->  /anything ----------------------------------
+    RewriteRule ^([a-z0-9][a-z0-9-]{1,38})/(.*)$ $2 [E=TENANT:$1,QSA,L]
+
+</IfModule>
+
+# Library code, page fragments and modules are includes, never entry points.
+# modules/*.php in particular expect $conn and a session to already exist --
+# the "prevent direct access" guard at the top of each one is an empty if-body
+# and does not actually block anything, so block them here.
+<IfModule mod_authz_core.c>
+    <FilesMatch "\.(sql|md|yml|yaml|lock|json|example)$">
+        Require all denied
+    </FilesMatch>
+</IfModule>
+
+RedirectMatch 404 ^/(lib|partials|modules)/.*\.php$
+RedirectMatch 404 /\.git
+
+# Uploaded files are user content and must never execute — that guard lives in
+# uploads/.htaccess, because <Directory> is only valid in server config.

@@ -401,7 +401,7 @@ document.addEventListener('DOMContentLoaded', function() {
     
     /* Welcome Hero Section */
     .home-welcome-section {
-        background: linear-gradient(135deg, #8b5a2b 0%, #5d3e1e 100%);
+        background: linear-gradient(135deg, var(--brown-700) 0%, var(--brown-800) 100%);
         border-radius: 24px;
         padding: 32px 40px;
         margin-bottom: 32px;
@@ -564,7 +564,7 @@ document.addEventListener('DOMContentLoaded', function() {
     }
     
     .home-stat-card-primary::before {
-        background: #8b5a2b;
+        background: var(--brown-700);
     }
     
     .home-stat-card-success::before {
@@ -627,7 +627,7 @@ document.addEventListener('DOMContentLoaded', function() {
     
     .home-stat-icon-primary {
         background: rgba(139, 90, 43, 0.1);
-        color: #8b5a2b;
+        color: var(--brown-700);
     }
     
     .home-stat-icon-success {
@@ -665,7 +665,7 @@ document.addEventListener('DOMContentLoaded', function() {
     }
     
     .home-stat-link {
-        color: #8b5a2b;
+        color: var(--brown-700);
         text-decoration: none;
         font-size: 13px;
         font-weight: 500;
@@ -677,7 +677,7 @@ document.addEventListener('DOMContentLoaded', function() {
     
     .home-stat-link:hover {
         gap: 10px;
-        color: #5d3e1e;
+        color: var(--brown-800);
     }
     
     /* Status Badge */
@@ -733,7 +733,7 @@ document.addEventListener('DOMContentLoaded', function() {
     
     .home-company-header i {
         font-size: 24px;
-        color: #8b5a2b;
+        color: var(--brown-700);
     }
     
     .home-company-header h3 {
@@ -787,7 +787,7 @@ document.addEventListener('DOMContentLoaded', function() {
         width: 48px;
         height: 48px;
         border-radius: 50%;
-        background: #8b5a2b;
+        background: var(--brown-700);
         color: white;
         border: none;
         cursor: pointer;
@@ -800,7 +800,7 @@ document.addEventListener('DOMContentLoaded', function() {
     }
     
     .home-refresh-btn:hover {
-        background: #5d3e1e;
+        background: var(--brown-800);
         transform: scale(1.05);
     }
     
@@ -867,7 +867,7 @@ document.addEventListener('DOMContentLoaded', function() {
         width: 20px;
         height: 20px;
         border: 2px solid var(--gray-300);
-        border-top-color: #8b5a2b;
+        border-top-color: var(--brown-700);
         border-radius: 50%;
         animation: home-spin 0.8s linear infinite;
     }

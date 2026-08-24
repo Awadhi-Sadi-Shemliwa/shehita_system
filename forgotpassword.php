@@ -12,7 +12,10 @@
  * - Generic error messages for security
  */
 
-session_start();
+// Multi-tenant bootstrap: resolves which company this URL belongs to, opens a
+// session scoped to that company, and defines TENANT_DB for config.php.
+// This REPLACES session_start() -- the session must be scoped before it starts.
+require_once __DIR__ . '/bootstrap.php';
 
 // Redirect if already logged in
 if (isset($_SESSION['email'])) {
@@ -219,34 +222,17 @@ if ($step == 2 && isset($_SESSION['reset_email'])) {
 }
 
 // Determine logo path
-$logo_path = '';
-$possible_logo_paths = [
-    'uploads/systemlogo/shehita-logo.jpg',
-    'uploads/systemlogo/Shehita_Logo.jpg',
-    'uploads/systemlogo/Shehita_Logo.jpeg',
-    'uploads/systemlogo/logo.png',
-    'uploads/systemlogo/logo.jpg'
-];
-
-foreach ($possible_logo_paths as $path) {
-    if (file_exists($path)) {
-        $logo_path = $path;
-        break;
-    }
-    if (file_exists('../' . $path)) {
-        $logo_path = '../' . $path;
-        break;
-    }
-}
-
-$logo_exists = !empty($logo_path);
+$logo_path    = tenant_logo_url();
+$logo_exists  = $logo_path !== '';
+$company_name = tenant_display_name();
+$product_name = tenant_product_name();
 ?>
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>SHEHITA EMS - Forgot Password</title>
+    <title><?= htmlspecialchars($product_name) ?> - Forgot Password</title>
     <?php if ($logo_exists): ?>
     <link rel="icon" href="<?= htmlspecialchars($logo_path) ?>">
     <?php endif; ?>
@@ -598,6 +584,7 @@ $logo_exists = !empty($logo_path);
             }
         }
     </style>
+    <?php echo tenant_theme_css(); ?>
 </head>
 <body>
     <div class="container">
@@ -605,9 +592,9 @@ $logo_exists = !empty($logo_path);
             <!-- Logo Container -->
             <div class="logo-container">
                 <?php if ($logo_exists): ?>
-                    <img src="<?= htmlspecialchars($logo_path) ?>" alt="SHEHITA" class="logo">
+                    <img src="<?= htmlspecialchars($logo_path) ?>" alt="<?= htmlspecialchars($company_name) ?>" class="logo">
                 <?php else: ?>
-                    <div class="logo-text">SHEHITA</div>
+                    <div class="logo-text"><?= htmlspecialchars($company_name) ?></div>
                     <span class="logo-sub">Enterprise Management System</span>
                 <?php endif; ?>
             </div>
