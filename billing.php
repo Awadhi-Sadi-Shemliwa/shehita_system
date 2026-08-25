@@ -243,7 +243,7 @@ function money(float $amount, string $currency): string
         .alert.ok  { background: #dcfce7; color: #166534; border-left: 3px solid #16a34a; }
         .alert ul { margin: 6px 0 0 18px; }
 
-        .plans { display: grid; gap: 14px; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); margin-top: 16px; }
+        .plans { display: grid; gap: 14px; grid-template-columns: repeat(auto-fit, minmax(min(190px, 100%), 1fr)); margin-top: 16px; }
         .plan {
             border: 1.5px solid var(--brown-200); border-radius: 12px; padding: 17px 18px;
             background: var(--brown-100);

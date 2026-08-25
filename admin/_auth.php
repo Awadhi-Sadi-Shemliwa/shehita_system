@@ -106,7 +106,7 @@ h1{font-size:1.3rem;color:var(--brown-900);margin-bottom:5px}
   box-shadow:0 1px 3px rgb(0 0 0 / .08)}
 .card h2{font-size:1rem;color:var(--brown-900);margin-bottom:4px}
 
-.stats{display:grid;gap:14px;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));margin-bottom:20px}
+.stats{display:grid;gap:14px;grid-template-columns:repeat(auto-fit,minmax(min(160px, 100%), 1fr));margin-bottom:20px}
 .stat{background:#fff;border-radius:13px;padding:18px 20px;box-shadow:0 1px 3px rgb(0 0 0 / .08)}
 .stat .n{font-size:1.75rem;font-weight:700;color:var(--brown-800);line-height:1.1}
 .stat .l{font-size:.81rem;color:var(--gray-500);margin-top:5px;font-weight:500}
@@ -128,7 +128,7 @@ input,select,textarea{width:100%;padding:10px 13px;border:1.5px solid var(--brow
 input:focus,select:focus,textarea:focus{outline:none;border-color:var(--brown-600)}
 .field{margin-bottom:14px}
 .grid2{display:grid;gap:14px;grid-template-columns:1fr 1fr}
-.grid3{display:grid;gap:14px;grid-template-columns:repeat(auto-fit,minmax(180px,1fr))}
+.grid3{display:grid;gap:14px;grid-template-columns:repeat(auto-fit,minmax(min(180px, 100%), 1fr))}
 @media(max-width:600px){.grid2{grid-template-columns:1fr}}
 
 /* ------------------------------------------------------------------------

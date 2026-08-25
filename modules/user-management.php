@@ -1504,7 +1504,7 @@ window.closePreviewModal = closePreviewModal;
 
     .user-form-grid {
         display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+        grid-template-columns: repeat(auto-fit, minmax(min(300px, 100%), 1fr));
         gap: 20px;
         margin-bottom: 20px;
     }

@@ -684,7 +684,7 @@ window.dept_confirmDelete = dept_confirmDelete;
 
     .dept-form-grid {
         display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+        grid-template-columns: repeat(auto-fit, minmax(min(250px, 100%), 1fr));
         gap: 16px;
         margin-bottom: 20px;
     }

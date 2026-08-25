@@ -837,7 +837,7 @@ window.updateInvoiceLanguage = updateInvoiceLanguage;
     /* KPI Cards Row */
     .inv-kpi-row {
         display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+        grid-template-columns: repeat(auto-fit, minmax(min(200px, 100%), 1fr));
         gap: 20px;
         margin-bottom: 28px;
     }
@@ -973,7 +973,7 @@ window.updateInvoiceLanguage = updateInvoiceLanguage;
 
     .inv-form-grid {
         display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+        grid-template-columns: repeat(auto-fit, minmax(min(300px, 100%), 1fr));
         gap: 20px;
         margin-bottom: 24px;
     }
@@ -1045,7 +1045,7 @@ window.updateInvoiceLanguage = updateInvoiceLanguage;
 
     .inv-customer-details-grid {
         display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+        grid-template-columns: repeat(auto-fit, minmax(min(200px, 100%), 1fr));
         gap: 12px;
     }
 
@@ -1088,7 +1088,7 @@ window.updateInvoiceLanguage = updateInvoiceLanguage;
 
     .inv-financial-grid {
         display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+        grid-template-columns: repeat(auto-fit, minmax(min(200px, 100%), 1fr));
         gap: 16px;
     }
 

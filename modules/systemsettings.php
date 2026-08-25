@@ -560,7 +560,7 @@ window.updateSystemLanguage = updateSystemLanguage;
     /* Settings Grid */
     .sys-settings-grid {
         display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(500px, 1fr));
+        grid-template-columns: repeat(auto-fit, minmax(min(500px, 100%), 1fr));
         gap: 24px;
     }
     

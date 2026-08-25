@@ -697,7 +697,7 @@ document.addEventListener('DOMContentLoaded', function() {
     /* KPI Cards Row */
     .status-kpi-row {
         display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+        grid-template-columns: repeat(auto-fit, minmax(min(200px, 100%), 1fr));
         gap: 20px;
         margin-bottom: 32px;
     }
