@@ -201,8 +201,9 @@ subscription code.
   emailed links use), then `.\dev.ps1 restart`.
 
 - **The AI assistant bubble doesn't appear**
-  → It renders nothing unless `ANTHROPIC_API_KEY` is set *and* `vendor/` exists. Add the
-  key to the `docker run` block in `dev.ps1`, then `.\dev.ps1 restart`.
+  → It renders nothing unless `AI_API_KEY` is set. `dev.ps1` reads it from your own shell
+  rather than storing it in this public repo, so set it and restart:
+  `$env:AI_API_KEY = "gsk_..."` then `.\dev.ps1 restart`.
 
 - **Database access**
   → MySQL is exposed on host port **3307** for inspection with a database client
@@ -228,16 +229,35 @@ There is no `.sql` file. Schema is created in code and is self-healing:
 ## The AI assistant
 
 A chat bubble on every page (`partials/ai-assistant.php` → `ai/chat.php`) that explains how
-the system works and answers questions about that company's own records, using
-`claude-opus-5`.
+the system works and answers questions about that company's own records.
 
 It is **read-only** and **permission-checked**: every tool in `lib/ai_tools.php` re-runs
 `canView()` against the signed-in user's role before returning anything, so the assistant
 cannot be used to read past the permissions table. The model never writes SQL — each tool
 is one fixed parameterised query.
 
-Set `ANTHROPIC_API_KEY` to enable it. Usage is capped per company per month
-(`tenants.ai_monthly_cap`) and SHEHITA can turn it off per company.
+### Which model
+
+The call goes over the **OpenAI-compatible chat-completions API**, which Groq, Google
+Gemini, OpenRouter, Mistral, DeepSeek and Cerebras all speak — so the provider is three
+environment variables and changing it needs no code change:
+
+| Variable | Default |
+|---|---|
+| `AI_API_KEY` | *(empty — assistant disabled)* |
+| `AI_BASE_URL` | `https://api.groq.com/openai/v1` |
+| `AI_MODEL` | `llama-3.3-70b-versatile` |
+
+Nothing in `lib/ai_tools.php` knows or cares which provider is in use. The call itself is
+plain curl, so the assistant does not depend on `composer install` having run.
+
+> ⚠️ **Free tiers generally reserve the right to train on what you send them**, and this
+> assistant reads client companies' customers, invoices and financials. The Groq default
+> is for testing against your own dummy companies. Before switching it on for a paying
+> customer, move to a paid tier with a no-training guarantee.
+
+Usage is capped per company per month (`tenants.ai_monthly_cap`) and SHEHITA can turn it
+off per company (`tenants.ai_enabled`, from `/admin/`).
 
 ---
 

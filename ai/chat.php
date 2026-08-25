@@ -5,6 +5,13 @@
  * Answers questions about how the system works, and about this company's own
  * records. Called by the chat panel in partials/ai-assistant.php.
  *
+ * The model is reached over the OpenAI-compatible chat-completions API rather
+ * than a vendor SDK, because Groq, Google Gemini, OpenRouter, Mistral, DeepSeek
+ * and Cerebras all speak it. The provider is therefore three environment
+ * variables (AI_API_KEY, AI_BASE_URL, AI_MODEL) and changing it needs no code
+ * change. It also means the assistant runs on plain curl, so it does not depend
+ * on `composer install` having produced a vendor/ directory.
+ *
  * Boundaries, all enforced server-side:
  *   - Scoped to ONE company. $conn comes from config.php, which is pointed at
  *     TENANT_DB by bootstrap.php, so there is no query path to another
@@ -48,7 +55,10 @@ if ((int)($TENANT['ai_enabled'] ?? 1) !== 1) {
     ai_json(['error' => 'The assistant is not enabled for your company.'], 403);
 }
 
-$apiKey = getenv('ANTHROPIC_API_KEY') ?: '';
+$apiKey  = getenv('AI_API_KEY') ?: '';
+$baseUrl = rtrim(getenv('AI_BASE_URL') ?: 'https://api.groq.com/openai/v1', '/');
+$model   = getenv('AI_MODEL') ?: 'llama-3.3-70b-versatile';
+
 if ($apiKey === '') {
     ai_json(['error' => 'The assistant is not configured on this server.'], 503);
 }
@@ -70,11 +80,6 @@ if (mb_strlen($question) > 2000) {
     ai_json(['error' => 'That message is too long. Please shorten it.'], 400);
 }
 
-$autoload = __DIR__ . '/../vendor/autoload.php';
-if (!is_file($autoload)) {
-    ai_json(['error' => 'The assistant is not installed on this server.'], 503);
-}
-require_once $autoload;
 require_once __DIR__ . '/../lib/ai_tools.php';
 
 $conn = require __DIR__ . '/../config.php';
@@ -114,24 +119,28 @@ if ($cap > 0 && $usedThisMonth >= $cap) {
 // ---------------------------------------------------------------------------
 
 // Kept in the session, capped, so a long chat cannot grow the request forever.
-$history = (array)($_SESSION['ai_history'] ?? []);
+// The key is versioned: the previous one held Anthropic content blocks, and
+// replaying one of those into an OpenAI-compatible endpoint is a guaranteed
+// 400. A new key retires those sessions without needing a migration.
+unset($_SESSION['ai_history']);   // the retired v1 key, freed rather than left to rot
+
+$history = (array)($_SESSION['ai_history_v2'] ?? []);
 if (($payload['reset'] ?? false) === true) {
     $history = [];
 }
-$history = array_slice($history, -12);
+$history = ai_trim_history($history);
 
 $roleId   = (int)($_SESSION['role_id'] ?? 0);
 $roleName = getUserRoleName($conn, $roleId);
 $userName = (string)($_SESSION['name'] ?? '');
 
 /**
- * The system prompt is deliberately split in two.
- *
- * The first block is identical on every request from every company, so it is
- * marked cacheable — it is comfortably over the ~1024-token minimum and gets
- * re-read on each turn of a conversation. The second block carries the details
- * that change (company, user, subscription) and is left uncached, because
- * putting it before the stable text would invalidate the cache every time.
+ * The system prompt is kept in two pieces: one identical on every request from
+ * every company, one carrying the details that change (company, user,
+ * subscription). They are concatenated into a single system message here —
+ * Groq has no prompt caching, so there is nothing to gain from separating them
+ * on the wire — but the split is left in place because a provider that does
+ * cache wants the stable text first and the volatile text after it.
  */
 $staticSystem = <<<'PROMPT'
 You are the built-in assistant inside SHEHITA EMS, an Enterprise Management System used by
@@ -191,6 +200,8 @@ $contextSystem = "Current context.\n"
     . "Subscription: {$subLine}\n"
     . "Today's date: {$today}";
 
+$systemPrompt = $staticSystem . "\n\n" . $contextSystem;
+
 $messages = $history;
 $messages[] = ['role' => 'user', 'content' => $question];
 
@@ -199,80 +210,102 @@ $messages[] = ['role' => 'user', 'content' => $question];
 // ---------------------------------------------------------------------------
 
 try {
-    $client = new \Anthropic\Client(apiKey: $apiKey);
-    $tools  = ai_tool_definitions();
+    // Each definition in lib/ai_tools.php is already plain JSON Schema; the
+    // OpenAI wire format only wraps it.
+    $tools = array_map(
+        static fn(array $tool): array => ['type' => 'function', 'function' => $tool],
+        ai_tool_definitions()
+    );
 
-    $system = [
-        ['type' => 'text', 'text' => $staticSystem, 'cacheControl' => ['type' => 'ephemeral']],
-        ['type' => 'text', 'text' => $contextSystem],
-    ];
-
-    $usage = ['in' => 0, 'out' => 0, 'cached' => 0];
+    $usage     = ['in' => 0, 'out' => 0, 'cached' => 0];
     $toolsUsed = [];
 
     // Bounded loop: the assistant answers questions, it does not run long
     // agentic tasks, so a handful of lookups is always enough. The bound also
     // means one message can never cost an unbounded number of API calls.
     for ($turn = 0; $turn < 6; $turn++) {
-        $response = $client->messages->create(
-            model:        'claude-opus-5',
-            maxTokens:    2000,
-            system:       $system,
-            messages:     $messages,
-            tools:        $tools,
-            thinking:     ['type' => 'adaptive'],
-            outputConfig: ['effort' => 'low'],
-        );
+        $response = ai_model_call($baseUrl, $apiKey, [
+            'model'       => $model,
+            'max_tokens'  => 2000,
+            'temperature' => 0.2,
+            'messages'    => array_merge([['role' => 'system', 'content' => $systemPrompt]], $messages),
+            'tools'       => $tools,
+            'tool_choice' => 'auto',
+        ]);
 
-        $usage['in']     += $response->usage->inputTokens ?? 0;
-        $usage['out']    += $response->usage->outputTokens ?? 0;
-        $usage['cached'] += $response->usage->cacheReadInputTokens ?? 0;
+        // Free tiers rate-limit, and the generic message below would wrongly
+        // read as an outage. Say what is actually happening.
+        if ($response['status'] === 429) {
+            ai_json(['error' => 'The assistant is busy right now. Please try again in a moment.'], 429);
+        }
 
-        if ($response->stopReason !== 'tool_use') {
-            $answer = '';
-            foreach ($response->content as $block) {
-                if ($block->type === 'text') {
-                    $answer .= $block->text;
-                }
-            }
+        if ($response['status'] < 200 || $response['status'] >= 300 || !is_array($response['json'])) {
+            error_log("ai/chat.php: model call failed status={$response['status']} "
+                    . 'body=' . substr($response['raw'], 0, 500));
+            ai_json(['error' => 'The assistant is unavailable right now. Please try again shortly.'], 502);
+        }
 
-            $messages[] = ['role' => 'assistant', 'content' => $response->content];
-            $_SESSION['ai_history'] = array_slice($messages, -12);
+        $json = $response['json'];
+
+        $usage['in']  += (int)($json['usage']['prompt_tokens'] ?? 0);
+        $usage['out'] += (int)($json['usage']['completion_tokens'] ?? 0);
+
+        $choice = $json['choices'][0] ?? [];
+        $msg    = is_array($choice['message'] ?? null) ? $choice['message'] : [];
+        $calls  = is_array($msg['tool_calls'] ?? null) ? $msg['tool_calls'] : [];
+
+        // No lookups requested, or the reply was cut short: this is the answer.
+        if ($calls === [] || ($choice['finish_reason'] ?? '') === 'length') {
+            $answer = trim((string)($msg['content'] ?? ''));
+
+            $messages[] = ['role' => 'assistant', 'content' => $answer];
+            $_SESSION['ai_history_v2'] = ai_trim_history($messages);
 
             ai_log_usage($control, TENANT_ID, (string)$_SESSION['email'], $usage);
 
             ai_json([
-                'answer'    => trim($answer) !== '' ? trim($answer) : 'I could not work that out. Please rephrase.',
+                'answer'    => $answer !== '' ? $answer : 'I could not work that out. Please rephrase.',
                 'tools'     => $toolsUsed,
                 'remaining' => $cap > 0 ? max(0, $cap - $usedThisMonth - 1) : null,
             ]);
         }
 
-        // Execute every requested tool and return all results in ONE user turn.
-        $results = [];
-        foreach ($response->content as $block) {
-            if ($block->type !== 'tool_use') {
-                continue;
+        // The assistant turn goes back verbatim, tool_calls and all, or the
+        // provider rejects the tool results that follow it.
+        $messages[] = [
+            'role'       => 'assistant',
+            'content'    => (string)($msg['content'] ?? ''),
+            'tool_calls' => $calls,
+        ];
+
+        // One `tool` message per call, each carrying its own tool_call_id.
+        // (Anthropic took every result in a single user turn; OpenAI does not.)
+        foreach ($calls as $call) {
+            $name = (string)($call['function']['name'] ?? '');
+
+            // Arguments arrive as a JSON *string*, and a model can emit an
+            // unparseable one. Treat that as "no arguments" and let the tool's
+            // own validation produce the refusal.
+            $args = json_decode((string)($call['function']['arguments'] ?? ''), true);
+            if (!is_array($args)) {
+                $args = [];
             }
 
-            $toolsUsed[] = $block->name;
+            $toolsUsed[] = $name;
 
             try {
-                $result = ai_run_tool($conn, $roleId, $block->name, (array)$block->input);
+                $result = ai_run_tool($conn, $roleId, $name, $args);
             } catch (Throwable $e) {
-                error_log('ai tool ' . $block->name . ' failed: ' . $e->getMessage());
+                error_log('ai tool ' . $name . ' failed: ' . $e->getMessage());
                 $result = 'That lookup failed.';
             }
 
-            $results[] = [
-                'type'      => 'tool_result',
-                'toolUseID' => $block->id,
-                'content'   => $result,
+            $messages[] = [
+                'role'         => 'tool',
+                'tool_call_id' => (string)($call['id'] ?? ''),
+                'content'      => $result,
             ];
         }
-
-        $messages[] = ['role' => 'assistant', 'content' => $response->content];
-        $messages[] = ['role' => 'user', 'content' => $results];
     }
 
     ai_log_usage($control, TENANT_ID, (string)$_SESSION['email'], $usage);
@@ -281,6 +314,61 @@ try {
 } catch (Throwable $e) {
     error_log('ai/chat.php: ' . get_class($e) . ': ' . $e->getMessage());
     ai_json(['error' => 'The assistant is unavailable right now. Please try again shortly.'], 502);
+}
+
+/**
+ * One POST to the provider's /chat/completions endpoint.
+ *
+ * Never throws and never judges the result: the caller decides what a given
+ * status means. A transport failure comes back as status 0 with the curl error
+ * in `raw`, so it is logged like any other failure rather than surfacing as an
+ * exception from inside the loop.
+ *
+ * @return array{status:int, json:mixed, raw:string}
+ */
+function ai_model_call(string $baseUrl, string $apiKey, array $body): array
+{
+    $ch = curl_init($baseUrl . '/chat/completions');
+    curl_setopt_array($ch, [
+        CURLOPT_POST           => true,
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_TIMEOUT        => 60,
+        CURLOPT_HTTPHEADER     => [
+            'Authorization: Bearer ' . $apiKey,
+            'Content-Type: application/json',
+        ],
+        CURLOPT_POSTFIELDS     => json_encode($body, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE),
+    ]);
+
+    $raw    = curl_exec($ch);
+    $status = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    $error  = curl_error($ch);
+    curl_close($ch);
+
+    if ($raw === false) {
+        return ['status' => 0, 'json' => null, 'raw' => 'curl: ' . $error];
+    }
+
+    return ['status' => $status, 'json' => json_decode($raw, true), 'raw' => (string)$raw];
+}
+
+/**
+ * Keep the last few turns, and keep them VALID.
+ *
+ * A plain array_slice() can cut an assistant turn away from the `tool` messages
+ * that answer it, and a `tool` message with no matching tool_calls before it is
+ * rejected by the provider — a 400 that would look like a model outage. So
+ * after slicing, drop from the front until the history starts on a user turn.
+ */
+function ai_trim_history(array $messages, int $max = 12): array
+{
+    $messages = array_slice($messages, -$max);
+
+    while ($messages !== [] && ($messages[0]['role'] ?? '') !== 'user') {
+        array_shift($messages);
+    }
+
+    return array_values($messages);
 }
 
 /**

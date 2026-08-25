@@ -107,6 +107,10 @@ function Start-Stack {
     # picks up the current code. All state is in the database volume.
     if (Test-ContainerExists $WebName) { docker rm -f $WebName | Out-Null }
 
+    # The AI assistant's key is read from YOUR shell, never stored in this file:
+    # the repo is public. Turn the assistant on for a session with
+    #   $env:AI_API_KEY = "gsk_..."   then   .\dev.ps1 restart
+    # Left unset it is empty, and the chat bubble is simply not rendered.
     docker run -d --name $WebName --network $Network -p "${Port}:80" `
         -v "${ProjectDir}:/var/www/html" `
         -e APP_ENV=development `
@@ -121,6 +125,9 @@ function Start-Stack {
         -e MAIL_DRIVER=log `
         -e MAIL_LOG_FILE=/tmp/mail.log `
         -e CRON_KEY=local-dev-cron-key `
+        -e AI_API_KEY="$env:AI_API_KEY" `
+        -e AI_BASE_URL=https://api.groq.com/openai/v1 `
+        -e AI_MODEL=llama-3.3-70b-versatile `
         --restart unless-stopped `
         $Image | Out-Null
 

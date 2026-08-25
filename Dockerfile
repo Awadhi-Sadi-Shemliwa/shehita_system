@@ -9,9 +9,9 @@ RUN docker-php-ext-install mysqli && docker-php-ext-enable mysqli
 #
 # unzip is required by Composer: without it `composer install` cannot unpack
 # packages and fails with "The zip extension and unzip/7z commands are both
-# missing". That failure is easy to miss locally, because the bind mount in
-# development supplies a vendor/ directory built on the host — but in production
-# it would leave vendor/ empty and the AI assistant silently unavailable.
+# missing". The app currently requires no PHP packages at all, so nothing breaks
+# today — but the moment one is added this would fail in production while the
+# bind-mounted vendor/ kept development working, so it stays installed.
 RUN apt-get update \
  && apt-get install -y --no-install-recommends \
         libjpeg62-turbo-dev libpng-dev libwebp-dev libfreetype6-dev \
@@ -38,7 +38,11 @@ RUN { \
       echo "post_max_size = 25M"; \
     } > /usr/local/etc/php/conf.d/uploads.ini
 
-# Composer, for the Anthropic PHP SDK used by the AI assistant.
+# Composer. The app has no PHP package dependencies right now — the AI
+# assistant talks to the model over plain curl and lib/mailer.php uses the
+# Resend HTTP API — so `composer install` currently installs nothing and simply
+# produces an autoloader. The stage is kept so adding a package later (PHPMailer,
+# were MAIL_DRIVER=smtp ever wanted) is a composer.json edit and nothing more.
 COPY --from=composer:2 /usr/bin/composer /usr/bin/composer
 
 WORKDIR /var/www/html

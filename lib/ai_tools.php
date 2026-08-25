@@ -22,8 +22,8 @@
  */
 
 /**
- * Tool definitions in the shape the Anthropic PHP SDK expects (camelCase
- * `inputSchema`; the SDK maps it to the wire format).
+ * Tool definitions in the OpenAI-compatible shape: plain JSON Schema under
+ * `parameters`. ai/chat.php wraps each one in {type: function, function: …}.
  */
 function ai_tool_definitions(): array
 {
@@ -33,12 +33,12 @@ function ai_tool_definitions(): array
             'description' => 'Get this company\'s SHEHITA subscription: whether it is a free trial '
                            . 'or a paid subscription, how many days remain, and the end date. '
                            . 'Use this for any question about billing, renewal, expiry or "how long do we have".',
-            'inputSchema' => ['type' => 'object', 'properties' => (object)[], 'required' => []],
+            'parameters'  => ['type' => 'object', 'properties' => (object)[], 'required' => []],
         ],
         [
             'name'        => 'count_records',
             'description' => 'Count the rows in one of this company\'s tables. Use for "how many X do we have".',
-            'inputSchema' => [
+            'parameters'  => [
                 'type' => 'object',
                 'properties' => [
                     'entity' => [
@@ -57,7 +57,7 @@ function ai_tool_definitions(): array
         [
             'name'        => 'search_customers',
             'description' => 'Find customers by name, email or contact person.',
-            'inputSchema' => [
+            'parameters'  => [
                 'type' => 'object',
                 'properties' => [
                     'query' => ['type' => 'string', 'description' => 'Text to search for.'],
@@ -70,7 +70,7 @@ function ai_tool_definitions(): array
             'name'        => 'list_invoices',
             'description' => 'List this company\'s invoices, optionally filtered by status or date range. '
                            . 'Use for questions about who owes money or what has been billed.',
-            'inputSchema' => [
+            'parameters'  => [
                 'type' => 'object',
                 'properties' => [
                     'status' => [
@@ -89,7 +89,7 @@ function ai_tool_definitions(): array
             'name'        => 'financial_summary',
             'description' => 'Totals across this company\'s contracts and invoices: contract value, '
                            . 'profit, and how much has been invoiced versus paid.',
-            'inputSchema' => [
+            'parameters'  => [
                 'type' => 'object',
                 'properties' => [
                     'from' => ['type' => 'string', 'description' => 'Optional start date, YYYY-MM-DD.'],
@@ -102,7 +102,7 @@ function ai_tool_definitions(): array
             'name'        => 'explain_module',
             'description' => 'Explain what a part of the system is for and how to use it. '
                            . 'Use this for "how do I..." and "what does this page do" questions.',
-            'inputSchema' => [
+            'parameters'  => [
                 'type' => 'object',
                 'properties' => [
                     'module' => [

@@ -68,7 +68,9 @@ openssl rand -base64 24
 | `RESEND_API_KEY`          | Required when `MAIL_DRIVER=resend`                                |
 | `MAIL_FROM`               | e.g. `SHEHITA EMS <no-reply@shehita.co.tz>`                       |
 | `CRON_KEY`                | Protects the daily reminder endpoint                              |
-| `ANTHROPIC_API_KEY`       | Enables the AI assistant. Leave empty to disable it.              |
+| `AI_API_KEY`              | Enables the AI assistant. Leave empty to disable it.              |
+| `AI_BASE_URL`             | Model endpoint, default `https://api.groq.com/openai/v1`. Any OpenAI-compatible provider works. |
+| `AI_MODEL`                | Default `llama-3.3-70b-versatile`                                 |
 
 > There is no `DB_NAME` any more. Each client company gets its own database
 > (`shems_<slug>`), created when they sign up.

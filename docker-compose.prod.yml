@@ -65,7 +65,9 @@ services:
       SMTP_SECURE: ${SMTP_SECURE:-tls}
 
       CRON_KEY: ${CRON_KEY}
-      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      AI_API_KEY: ${AI_API_KEY:-}
+      AI_BASE_URL: ${AI_BASE_URL:-https://api.groq.com/openai/v1}
+      AI_MODEL: ${AI_MODEL:-llama-3.3-70b-versatile}
     depends_on:
       db:
         condition: service_healthy

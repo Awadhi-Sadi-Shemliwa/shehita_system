@@ -10,10 +10,8 @@
  * colours automatically.
  */
 
-$ai_available = getenv('ANTHROPIC_API_KEY') !== false
-    && getenv('ANTHROPIC_API_KEY') !== ''
-    && (int)($TENANT['ai_enabled'] ?? 1) === 1
-    && is_file(__DIR__ . '/../vendor/autoload.php');
+$ai_available = (getenv('AI_API_KEY') ?: '') !== ''
+    && (int)($TENANT['ai_enabled'] ?? 1) === 1;
 
 if (!$ai_available) {
     return;
