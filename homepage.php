@@ -103,6 +103,31 @@ function canShowMenuItem($conn, $role_id, $module_name) {
     return canView($conn, $role_id, $module_name);
 }
 
+/**
+ * Should this navigation entry be shown?
+ *
+ * Most entries are modules and are governed by the permissions table. An entry
+ * marked 'admin_only' is NOT a module -- Billing is billing.php, a top-level
+ * page with no row in that table -- so it is gated on role 1 instead, the same
+ * test billing.php itself applies. They have to agree: a link shown to someone
+ * the page will bounce is worse than no link at all.
+ */
+function canShowNavItem($conn, $role_id, array $item) {
+    if (!empty($item['admin_only'])) {
+        return (int)$role_id === 1;
+    }
+
+    return canShowMenuItem($conn, $role_id, $item['page']);
+}
+
+/**
+ * Where a navigation entry points. Modules live under homepage.php?page=X;
+ * an entry carrying its own 'href' is a page in its own right.
+ */
+function navItemHref(array $item) {
+    return $item['href'] ?? ('?page=' . $item['page']);
+}
+
 // Get role name and department name for display if not already set in session
 if (!isset($_SESSION['role_name']) && isset($_SESSION['role_id'])) {
     $_SESSION['role_name'] = getUserRoleName($conn, $_SESSION['role_id']);
@@ -1022,7 +1047,7 @@ $product_name = tenant_product_name();
                 function renderDropdown($conn, $role_id, $items, $icon, $label, $current_page, $lang_key) {
                     $has_visible = false;
                     foreach ($items as $item) {
-                        if (canShowMenuItem($conn, $role_id, $item['page'])) {
+                        if (canShowNavItem($conn, $role_id, $item)) {
                             $has_visible = true;
                             break;
                         }
@@ -1046,10 +1071,10 @@ $product_name = tenant_product_name();
                     echo '<ul class="dropdown-menu">';
                     
                     foreach ($items as $item) {
-                        if (canShowMenuItem($conn, $role_id, $item['page'])) {
+                        if (canShowNavItem($conn, $role_id, $item)) {
                             $active_class = ($current_page == $item['page']) ? 'active' : '';
                             echo '<li>';
-                            echo '<a href="?page=' . $item['page'] . '" class="dropdown-item ' . $active_class . '" data-homepage-lang="' . $item['lang_key'] . '">';
+                            echo '<a href="' . htmlspecialchars(navItemHref($item)) . '" class="dropdown-item ' . $active_class . '" data-homepage-lang="' . $item['lang_key'] . '">';
                             echo '<i class="' . $item['icon'] . '"></i>';
                             echo '<span>' . $item['label'] . '</span>';
                             echo '</a>';
@@ -1089,7 +1114,11 @@ $product_name = tenant_product_name();
                     ['page' => 'departments', 'icon' => 'fas fa-sitemap', 'label' => 'Departments', 'lang_key' => 'departments'],
                     ['page' => 'roles', 'icon' => 'fas fa-user-tag', 'label' => 'Roles', 'lang_key' => 'roles'],
                     ['page' => 'permissions', 'icon' => 'fas fa-shield-alt', 'label' => 'Permissions', 'lang_key' => 'permissions'],
-                    ['page' => 'systemsettings', 'icon' => 'fas fa-globe', 'label' => 'System Settings', 'lang_key' => 'systemSettings']
+                    ['page' => 'systemsettings', 'icon' => 'fas fa-globe', 'label' => 'System Settings', 'lang_key' => 'systemSettings'],
+                    // Not a module: billing.php is a page of its own, and only the
+                    // company's own administrator may open it.
+                    ['page' => 'billing', 'href' => 'billing.php', 'icon' => 'fas fa-credit-card',
+                     'label' => 'Subscription & Billing', 'lang_key' => 'billing', 'admin_only' => true]
                 ];
                 
                 $user_dropdown_items = [
@@ -1195,7 +1224,7 @@ $product_name = tenant_product_name();
         function renderMobileDropdown($conn, $role_id, $items, $icon, $label, $current_page, $lang_key, $dropdown_id) {
             $has_visible = false;
             foreach ($items as $item) {
-                if (canShowMenuItem($conn, $role_id, $item['page'])) {
+                if (canShowNavItem($conn, $role_id, $item)) {
                     $has_visible = true;
                     break;
                 }
@@ -1222,10 +1251,10 @@ $product_name = tenant_product_name();
             echo '<ul class="mobile-dropdown-menu" id="mobileDropdown_' . $dropdown_id . '">';
             
             foreach ($items as $item) {
-                if (canShowMenuItem($conn, $role_id, $item['page'])) {
+                if (canShowNavItem($conn, $role_id, $item)) {
                     $active_class = ($current_page == $item['page']) ? 'active' : '';
                     echo '<li>';
-                    echo '<a href="?page=' . $item['page'] . '" class="mobile-dropdown-item ' . $active_class . '" data-homepage-lang="' . $item['lang_key'] . '">';
+                    echo '<a href="' . htmlspecialchars(navItemHref($item)) . '" class="mobile-dropdown-item ' . $active_class . '" data-homepage-lang="' . $item['lang_key'] . '">';
                     echo '<i class="' . $item['icon'] . '" style="margin-right: 8px;"></i>';
                     echo $item['label'];
                     echo '</a>';
@@ -1379,6 +1408,7 @@ $product_name = tenant_product_name();
                 roles: 'Roles',
                 permissions: 'Permissions',
                 systemSettings: 'System Settings',
+                billing: 'Subscription & Billing',
                 user: 'User',
                 profile: 'Profile',
                 invoices: 'Invoices',
@@ -1405,6 +1435,7 @@ $product_name = tenant_product_name();
                 roles: 'Majukumu',
                 permissions: 'Ruhusa',
                 systemSettings: 'Mipangilio ya Mfumo',
+                billing: 'Usajili na Malipo',
                 user: 'Mtumiaji',
                 profile: 'Wasifu',
                 invoices: 'Ankara',
