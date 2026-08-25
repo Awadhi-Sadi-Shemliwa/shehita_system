@@ -79,7 +79,7 @@ $can_view_current_page = canView($conn, $user_role_id, $current_page);
 // Define all valid modules
 $valid_modules = [
     'home', 'overview', 'projects', 'operations', 'status',
-    'projectlist', 'categories', 'projectgroup',
+    'categories', 'projectgroup',
     'customer-management', 'company-settings', 'user-management', 'departments', 'permissions',
     'roles', 'profile', 'invoice', 'systemsettings'
 ];
@@ -1212,7 +1212,6 @@ $product_name = tenant_product_name();
                 ];
                 
                 $projects_dropdown_items = [
-                    ['page' => 'projectlist', 'icon' => 'fas fa-list', 'label' => 'Project List', 'lang_key' => 'projectList'],
                     ['page' => 'categories', 'icon' => 'fas fa-tags', 'label' => 'Categories', 'lang_key' => 'categories'],
                     ['page' => 'projectgroup', 'icon' => 'fas fa-layer-group', 'label' => 'Groups', 'lang_key' => 'groups']
                 ];
@@ -1502,7 +1501,6 @@ $product_name = tenant_product_name();
                 operations: 'Operations',
                 status: 'Status',
                 projectsMenu: 'Projects',
-                projectList: 'Project List',
                 categories: 'Categories',
                 groups: 'Groups',
                 settings: 'Settings',
@@ -1526,7 +1524,6 @@ $product_name = tenant_product_name();
                 operations: 'Uendeshaji',
                 status: 'Hali',
                 projectsMenu: 'Miradi',
-                projectList: 'Orodha ya Miradi',
                 categories: 'Kategoria',
                 groups: 'Vikundi',
                 settings: 'Mipangilio',
