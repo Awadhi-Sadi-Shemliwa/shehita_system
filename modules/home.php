@@ -502,8 +502,15 @@ document.addEventListener('DOMContentLoaded', function() {
         box-shadow: 0 6px 16px rgba(0, 0, 0, 0.1);
     }
     
+    /*
+     * max-width MUST be relative to the card, not an absolute pixel figure.
+     * This was 320px inside a container capped at 240px -- 200px of content box
+     * once padding is taken off -- so any logo wider than that rendered straight
+     * out over the maroon banner behind it. Companies upload whatever logo they
+     * have, and wide banner marks are common.
+     */
     .home-welcome-logo img {
-        max-width: 320px;
+        max-width: 100%;
         max-height: 120px;
         width: auto;
         height: auto;
@@ -1231,7 +1238,10 @@ document.addEventListener('DOMContentLoaded', function() {
             const logoContainer = document.querySelector('.home-welcome-logo');
             
             if (data.logo_url && logoContainer) {
-                logoContainer.innerHTML = `<img src="${home_escapeHtml(data.logo_url)}" alt="Company Logo" id="home_companyLogo" style="max-width: 180px; max-height: 70px; width: auto; height: auto; object-fit: contain; display: block; margin: 0 auto;">`;
+                // No inline sizing: .home-welcome-logo img owns it. This used to
+                // carry its own max-width, so a refreshed logo rendered at a
+                // different size than the same logo on a fresh page load.
+                logoContainer.innerHTML = `<img src="${home_escapeHtml(data.logo_url)}" alt="Company Logo" id="home_companyLogo">`;
             } else if (logoContainer) {
                 logoContainer.innerHTML = `<div class="home-welcome-logo-placeholder">
                     <i class="fas fa-building"></i>

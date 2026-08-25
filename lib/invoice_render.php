@@ -85,6 +85,7 @@ function render_subscription_invoice(mysqli $control, array $invoice, array $ten
               color:#94a3b8;margin-bottom:7px;font-weight:700}
   .parties .name{font-weight:700;font-size:1rem;color:#3e2b1f}
   .parties div.line{font-size:.87rem;color:#475569;line-height:1.6}
+  .parties .pay-col{text-align:right}
 
   table.items{width:100%;border-collapse:collapse;margin-bottom:22px}
   table.items th{background:#f7f2ec;color:#3e2b1f;text-align:left;padding:11px 13px;
@@ -113,10 +114,43 @@ function render_subscription_invoice(mysqli $control, array $invoice, array $ten
             font-weight:600;font-size:.93rem;cursor:pointer;font-family:inherit}
   .printbtn:hover{background:#5c3e2d}
 
+  /* ----------------------------------------------------------------------
+     Phones. This page is CUSTOMER-facing -- an invoice link emailed to a
+     client, opened as often on a phone as on a desktop -- and it previously
+     had no small-screen rules at all: 48px of side padding left 264px of
+     usable width on a 360px handset, and the totals table's 270px min-width
+     alone was wider than that.
+
+     The header and parties rows stop being side-by-side, and the items table
+     scrolls inside its own wrapper rather than pushing the page sideways.
+     ---------------------------------------------------------------------- */
+  @media (max-width: 700px){
+    body{padding:14px 10px 34px}
+    .sheet{padding:24px 18px;border-radius:8px}
+    .head{flex-direction:column;gap:14px;padding-bottom:16px;margin-bottom:20px}
+    .head .right{text-align:left}
+    .parties{flex-direction:column;gap:18px;margin-bottom:22px}
+    /* Stacked, a right-aligned column reads as a mistake rather than a layout. */
+    .parties .pay-col{text-align:left}
+    .items-scroll{overflow-x:auto;-webkit-overflow-scrolling:touch;margin-bottom:22px}
+    .items-scroll table.items{min-width:460px;margin-bottom:0}
+    table.totals{min-width:0;width:100%;margin-left:0}
+    .foot{font-size:.74rem}
+  }
+
+  @media (max-width: 400px){
+    .sheet{padding:18px 13px}
+    .head .who{font-size:1.2rem}
+    table.items th,table.items td{padding:9px 8px}
+  }
+
   @media print{
     body{background:#fff;padding:0}
     .sheet{box-shadow:none;max-width:none;padding:0;border-radius:0}
     .no-print{display:none !important}
+    /* The scroll wrapper must not clip the table on paper. */
+    .items-scroll{overflow:visible}
+    .items-scroll table.items{min-width:0}
     @page{size:A4;margin:14mm}
   }
 </style>
@@ -153,7 +187,7 @@ function render_subscription_invoice(mysqli $control, array $invoice, array $ten
       <div class="line">{$email}</div>
       <div class="line">{$phone}</div>
     </div>
-    <div style="text-align:right;">
+    <div class="pay-col">
       <h3>Payment</h3>
       <div class="line">Method: {$method}</div>
       <div class="line">Reference: {$reference}</div>
@@ -161,14 +195,16 @@ function render_subscription_invoice(mysqli $control, array $invoice, array $ten
     </div>
   </div>
 
-  <table class="items">
-    <thead>
-      <tr><th>Description</th><th class="r">Amount ({$currency})</th></tr>
-    </thead>
-    <tbody>
-      <tr><td>{$desc}</td><td class="r">{$subtotal}</td></tr>
-    </tbody>
-  </table>
+  <div class="items-scroll">
+    <table class="items">
+      <thead>
+        <tr><th>Description</th><th class="r">Amount ({$currency})</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>{$desc}</td><td class="r">{$subtotal}</td></tr>
+      </tbody>
+    </table>
+  </div>
 
   <table class="totals">
     <tr><td class="lbl">Subtotal</td><td class="amt">{$subtotal}</td></tr>

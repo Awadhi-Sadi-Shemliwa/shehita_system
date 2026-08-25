@@ -29,9 +29,25 @@ if (!$ai_available) {
     .ai-fab:hover { background: var(--brown-800); transform: translateY(-2px); }
     .ai-fab.open  { background: var(--brown-900); }
 
+    /*
+     * The panel is anchored to the bottom and grows upward, so the height it may
+     * take is the viewport MINUS everything it must not cover: the fixed navbar
+     * above it, its own offset from the bottom, and a little breathing room.
+     *
+     * That figure used to be hardcoded as 130px, which was ~44px too generous --
+     * so on a short viewport the panel's top slid underneath the navbar and the
+     * "Assistant" header simply disappeared. Deriving it from --navbar-height
+     * also keeps it correct when the navbar shrinks to 60px on phones, which a
+     * constant never could.
+     */
     .ai-panel {
-        position: fixed; right: 22px; bottom: 88px; z-index: 900;
-        width: min(390px, calc(100vw - 32px)); max-height: min(620px, calc(100vh - 130px));
+        --ai-gap-bottom: 88px;
+        --ai-gap-top: 16px;
+
+        position: fixed; right: 22px; bottom: var(--ai-gap-bottom); z-index: 900;
+        width: min(390px, calc(100vw - 32px));
+        max-height: min(620px, calc(100vh - var(--navbar-height, 70px)
+                                     - var(--ai-gap-bottom) - var(--ai-gap-top)));
         background: #fff; border-radius: 16px; overflow: hidden;
         box-shadow: 0 18px 42px rgb(0 0 0 / .26);
         display: none; flex-direction: column;
@@ -95,8 +111,27 @@ if (!$ai_available) {
     @keyframes aiBlink { 0%, 60%, 100% { opacity: .25 } 30% { opacity: 1 } }
 
     @media (max-width: 520px) {
-        .ai-panel { right: 10px; left: 10px; width: auto; bottom: 80px; }
+        .ai-panel {
+            right: 10px; left: 10px; width: auto;
+            --ai-gap-bottom: 80px;
+        }
         .ai-fab { right: 14px; bottom: 14px; }
+    }
+
+    /* Small phones. The panel takes nearly the whole screen, because a 360px
+       device has no room for a floating window beside the content. */
+    @media (max-width: 479px) {
+        .ai-panel {
+            right: 8px; left: 8px;
+            --ai-gap-bottom: 72px;
+            --ai-gap-top: 8px;
+        }
+        .ai-fab {
+            right: 12px; bottom: 12px;
+            width: 50px; height: 50px; font-size: 1.2rem;
+        }
+        .ai-log { padding: 12px; }
+        .ai-msg .bub { max-width: 92%; }
     }
 </style>
 

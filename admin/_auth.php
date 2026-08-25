@@ -131,6 +131,44 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--brown-60
 .grid3{display:grid;gap:14px;grid-template-columns:repeat(auto-fit,minmax(180px,1fr))}
 @media(max-width:600px){.grid2{grid-template-columns:1fr}}
 
+/* ------------------------------------------------------------------------
+   Responsive. This file is the shell for all nine admin pages, so these
+   rules cover the whole console.
+
+   The topbar was a fixed-height single row that could not wrap: on a narrow
+   screen the "who / Sign out" block was pushed straight off the right-hand
+   edge, taking 119px of the page with it and making every admin page scroll
+   sideways.
+   ------------------------------------------------------------------------ */
+@media(max-width:820px){
+  .topbar{height:auto;flex-wrap:wrap;gap:10px 16px;padding:10px 16px}
+  .topbar nav{flex:1 1 100%;order:3;gap:2px}
+  .topbar .who{margin-left:auto;font-size:.78rem}
+  .wrap{padding:20px 16px 48px}
+}
+
+@media(max-width:479px){
+  .topbar{padding:9px 12px;gap:8px 10px}
+  .topbar .brand{font-size:.92rem}
+  .topbar nav a{padding:6px 9px;font-size:.84rem}
+  .topbar .who{font-size:.74rem}
+  .topbar .who a{margin-left:7px}
+  .wrap{padding:16px 12px 40px}
+  .card{padding:16px 14px;border-radius:11px}
+  .stats{grid-template-columns:1fr;gap:10px}
+  .grid3{grid-template-columns:1fr}
+  h1{font-size:1.15rem}
+  .btn{padding:10px 16px;font-size:.88rem}
+}
+
+/* Tables in this console are wrapped in overflow-x:auto containers at their
+   call sites, which is the right pattern for wide tabular data -- this only
+   makes the scroll obvious rather than something you discover by accident. */
+@media(max-width:820px){
+  .card > div[style*="overflow-x"]{-webkit-overflow-scrolling:touch}
+  table{min-width:640px}
+}
+
 .btn{padding:10px 20px;border:none;border-radius:8px;background:var(--brown-700);color:#fff;
   font-weight:600;font-size:.91rem;cursor:pointer;font-family:inherit;text-decoration:none;
   display:inline-block}

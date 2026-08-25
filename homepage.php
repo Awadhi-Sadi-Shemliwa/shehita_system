@@ -255,6 +255,11 @@ $product_name = tenant_product_name();
             justify-content: space-between;
             align-items: center;
             gap: 16px;
+            /* Without min-width:0 a flex child refuses to shrink below its
+               content width, so an over-long menu overflows the bar instead of
+               compressing. This is what let "Settings" and the user dropdown
+               run off the right-hand edge at 100% zoom. */
+            min-width: 0;
         }
 
         /* Logo Area */
@@ -289,6 +294,13 @@ $product_name = tenant_product_name();
 
         .navbar-logo-img {
             max-height: 45px;
+            /* A width cap matters as much as the height one. Companies upload
+               whatever logo they have, and a wide banner mark (the City St
+               George's logo is roughly 4:1) rendered at 45px tall is ~380px
+               wide -- which is most of the space the menu needed. Capping the
+               width letterboxes those logos instead of letting them push the
+               navigation off-screen. */
+            max-width: 200px;
             width: auto;
             object-fit: contain;
             display: block;
@@ -323,6 +335,10 @@ $product_name = tenant_product_name();
             padding: 0;
             flex-wrap: nowrap;
             overflow-x: visible;
+            /* Shrinkable, so the bar adapts rather than overflowing. The
+               breakpoint tiers below take over before it compresses far enough
+               to look cramped. */
+            min-width: 0;
         }
 
         .nav-item {
@@ -914,19 +930,61 @@ $product_name = tenant_product_name();
             }
         }
 
-        /* Responsive Styles */
-        @media (max-width: 1200px) {
-            .nav-link {
-                padding: 10px 12px;
-                font-size: 13px;
+        /* ------------------------------------------------------------------
+           Responsive tiers
+
+           Wide    >= 1400px   full navigation
+           Compact 1100-1399   tighter nav, smaller logo, avatar-only user chip
+           Tablet  768-1099    hamburger
+           Phone   480-767
+           Small   360-479     narrowest supported width
+
+           The compact tier exists because there is a wide gap between "the full
+           menu fits comfortably" and "show a hamburger". Previously the menu was
+           hidden only below 1024px, so every width above that had to fit nine
+           items on one line -- and on a normal laptop at 100% zoom, it did not.
+           ------------------------------------------------------------------ */
+
+        /* Compact: buy back horizontal space before giving up on the menu. */
+        @media (max-width: 1399px) {
+            .navbar-container {
+                padding: 0 16px;
+                gap: 10px;
             }
-            
+
+            .nav-menu {
+                gap: 2px;
+            }
+
+            .nav-link {
+                padding: 9px 10px;
+                font-size: 13px;
+                gap: 6px;
+            }
+
             .nav-link i {
                 font-size: 14px;
             }
+
+            .navbar-logo-img {
+                max-height: 40px;
+                max-width: 150px;
+            }
+
+            /* The name and role are the largest thing on the right and the
+               easiest to lose: the avatar still identifies who is signed in,
+               and the dropdown still lists everything. */
+            .user-info {
+                display: none;
+            }
+
+            .navbar-right {
+                gap: 10px;
+            }
         }
 
-        @media (max-width: 1024px) {
+        /* Tablet and below: the menu becomes the hamburger. */
+        @media (max-width: 1099px) {
             .nav-menu {
                 display: none;
             }
@@ -937,6 +995,12 @@ $product_name = tenant_product_name();
             
             .navbar-container {
                 padding: 0 16px;
+            }
+
+            /* With the menu gone there is room for the logo again. */
+            .navbar-logo-img {
+                max-height: 42px;
+                max-width: 190px;
             }
         }
 
@@ -972,6 +1036,58 @@ $product_name = tenant_product_name();
                 left: 20px;
                 max-width: calc(100% - 40px);
             }
+
+            .navbar-container {
+                padding: 0 12px;
+            }
+
+            .navbar-logo-img {
+                max-height: 36px;
+                max-width: 150px;
+            }
+        }
+
+        /* Small phones -- 360px is the narrowest width this app supports. */
+        @media (max-width: 479px) {
+            .navbar-container {
+                padding: 0 10px;
+                gap: 8px;
+            }
+
+            .navbar-logo-img {
+                max-height: 32px;
+                max-width: 120px;
+            }
+
+            .navbar-logo-wrapper {
+                padding: 2px 4px;
+            }
+
+            .main-content,
+            .module-wrapper {
+                padding: 12px;
+            }
+
+            .mobile-toggle {
+                width: 40px;
+                height: 40px;
+                font-size: 18px;
+            }
+
+            .user-avatar {
+                width: 34px;
+                height: 34px;
+            }
+        }
+
+        /* Backstop: no page may scroll sideways. A single over-wide element
+           anywhere would otherwise reintroduce the overflow this release fixes,
+           silently and on every page, since this file is the shell for all 16
+           modules. Wide data tables scroll inside their own containers, which
+           is unaffected by this. */
+        html, body {
+            max-width: 100%;
+            overflow-x: hidden;
         }
     </style>
     <?php echo tenant_theme_css(); ?>

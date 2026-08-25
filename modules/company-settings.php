@@ -808,10 +808,20 @@ window.updateCompanyLanguage = updateCompanyLanguage;
         transform: scale(1.02);
     }
     
+    /*
+     * contain, not cover. The container is a 200px square and company logos are
+     * frequently wide banner marks; `cover` filled the square by CROPPING the
+     * sides off, so an admin checking their logo saw a mutilated version of it.
+     * `contain` letterboxes instead, which is what a logo preview must do.
+     */
     .company-logo-preview img {
-        width: 100%;
-        height: 100%;
-        object-fit: cover;
+        max-width: 100%;
+        max-height: 100%;
+        width: auto;
+        height: auto;
+        object-fit: contain;
+        padding: 10px;
+        box-sizing: border-box;
     }
     
     .company-logo-placeholder {
