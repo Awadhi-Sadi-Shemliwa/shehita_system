@@ -91,7 +91,7 @@ if (!empty($missing_tables)) {
 // ============================================================================
 $AVAILABLE_MODULES = [
     'home', 'overview', 'projects', 'operations', 'status',
-    'projectlist', 'categories', 'projectgroup', 'expensescategory', 'expensesgroup',
+    'projectlist', 'categories', 'projectgroup',
     'customer-management', 'company-settings', 'user-management', 'departments', 
     'roles', 'permissions', 'profile', 'invoice', 'systemsettings'
 ];

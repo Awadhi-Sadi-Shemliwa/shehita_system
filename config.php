@@ -197,7 +197,6 @@ function loadUserPermissions($conn, $role_id) {
         $all_modules = [
             'home', 'overview', 'projects', 'operations', 'status',
             'projectlist', 'categories', 'projectgroup',
-            'expensescategory', 'expensesgroup',
             'customer-management', 'company-settings', 'user-management',
             'departments', 'permissions', 'roles', 'profile','invoice','systemsettings'
         ];

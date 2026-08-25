@@ -639,12 +639,6 @@ $product_name = tenant_product_name();
                         </div>
 
                         <div class="feature-card">
-                            <div class="feature-icon"><i class="fas fa-money-bill-wave"></i></div>
-                            <h3>Expense Tracking</h3>
-                            <p>Track and manage expenses efficiently with categorized expense groups and categories. Generate detailed reports for better financial insights.</p>
-                        </div>
-
-                        <div class="feature-card">
                             <div class="feature-icon"><i class="fas fa-users"></i></div>
                             <h3>User Management</h3>
                             <p>Complete user management system with role-based access control and department assignment. Secure, scalable, and easy to manage.</p>

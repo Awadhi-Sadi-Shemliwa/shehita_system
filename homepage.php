@@ -80,7 +80,6 @@ $can_view_current_page = canView($conn, $user_role_id, $current_page);
 $valid_modules = [
     'home', 'overview', 'projects', 'operations', 'status',
     'projectlist', 'categories', 'projectgroup',
-    'expensescategory', 'expensesgroup',
     'customer-management', 'company-settings', 'user-management', 'departments', 'permissions',
     'roles', 'profile', 'invoice', 'systemsettings'
 ];
@@ -1218,11 +1217,6 @@ $product_name = tenant_product_name();
                     ['page' => 'projectgroup', 'icon' => 'fas fa-layer-group', 'label' => 'Groups', 'lang_key' => 'groups']
                 ];
                 
-                $expenses_dropdown_items = [
-                    ['page' => 'expensescategory', 'icon' => 'fas fa-folder', 'label' => 'Categories', 'lang_key' => 'expensesCategories'],
-                    ['page' => 'expensesgroup', 'icon' => 'fas fa-object-group', 'label' => 'Groups', 'lang_key' => 'expensesGroups']
-                ];
-                
                 $settings_dropdown_items = [
                     ['page' => 'customer-management', 'icon' => 'fas fa-users', 'label' => 'Customer Management', 'lang_key' => 'customerManagement'],
                     ['page' => 'company-settings', 'icon' => 'fas fa-building', 'label' => 'Company Settings', 'lang_key' => 'companySettings'],
@@ -1248,7 +1242,6 @@ $product_name = tenant_product_name();
                 
                 // Render dropdown menus
                 renderDropdown($conn, $user_role_id, $projects_dropdown_items, 'fas fa-boxes', 'Projects', $current_page, 'projectsMenu');
-                renderDropdown($conn, $user_role_id, $expenses_dropdown_items, 'fas fa-money-bill-wave', 'Expenses', $current_page, 'expensesMenu');
                 renderDropdown($conn, $user_role_id, $settings_dropdown_items, 'fas fa-cog', 'Settings', $current_page, 'settings');
                 ?>
             </ul>
@@ -1392,7 +1385,6 @@ $product_name = tenant_product_name();
             
             // Render dropdowns for mobile
             renderMobileDropdown($conn, $user_role_id, $projects_dropdown_items, 'fas fa-boxes', 'Projects', $current_page, 'projectsMenu', 'projects');
-            renderMobileDropdown($conn, $user_role_id, $expenses_dropdown_items, 'fas fa-money-bill-wave', 'Expenses', $current_page, 'expensesMenu', 'expenses');
             renderMobileDropdown($conn, $user_role_id, $settings_dropdown_items, 'fas fa-cog', 'Settings', $current_page, 'settings', 'settings');
             
             // User dropdown items in mobile
@@ -1513,9 +1505,6 @@ $product_name = tenant_product_name();
                 projectList: 'Project List',
                 categories: 'Categories',
                 groups: 'Groups',
-                expensesMenu: 'Expenses',
-                expensesCategories: 'Categories',
-                expensesGroups: 'Groups',
                 settings: 'Settings',
                 customerManagement: 'Customer Management',
                 companySettings: 'Company Settings',
@@ -1540,9 +1529,6 @@ $product_name = tenant_product_name();
                 projectList: 'Orodha ya Miradi',
                 categories: 'Kategoria',
                 groups: 'Vikundi',
-                expensesMenu: 'Matumizi',
-                expensesCategories: 'Kategoria',
-                expensesGroups: 'Vikundi',
                 settings: 'Mipangilio',
                 customerManagement: 'Usimamizi wa Wateja',
                 companySettings: 'Mipangilio ya Kampuni',
