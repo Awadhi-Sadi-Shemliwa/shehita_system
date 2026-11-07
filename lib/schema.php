@@ -226,6 +226,7 @@ function ensure_tenant_schema(mysqli $conn, bool $force = false): void
         rate DECIMAL(15,2) NOT NULL DEFAULT 0.00,
         subtotal DECIMAL(15,2) NOT NULL DEFAULT 0.00,
         vat DECIMAL(15,2) NOT NULL DEFAULT 0.00,
+        withholding_tax DECIMAL(15,2) NOT NULL DEFAULT 0.00,
         total DECIMAL(15,2) NOT NULL DEFAULT 0.00,
         bank_name VARCHAR(255) NOT NULL,
         account_number VARCHAR(100) NOT NULL,

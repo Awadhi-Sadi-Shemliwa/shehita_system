@@ -105,6 +105,13 @@ if ($check_column && $check_column->num_rows == 0) {
     $conn->query($alter_sql);
 }
 
+// Add Withholding Tax storage for existing installations.
+$check_wht_column = $conn->query("SHOW COLUMNS FROM invoices LIKE 'withholding_tax'");
+if ($check_wht_column && $check_wht_column->num_rows == 0) {
+    $alter_sql = "ALTER TABLE invoices ADD COLUMN withholding_tax DECIMAL(15,2) NOT NULL DEFAULT 0.00 AFTER vat";
+    $conn->query($alter_sql);
+}
+
 /**
  * ============================================================================
  * CSRF PROTECTION
@@ -153,10 +160,6 @@ function getCompanySettingsForInvoice($conn) {
     $result = $conn->query("SELECT * FROM company_settings LIMIT 1");
     if ($result && $result->num_rows > 0) {
         $settings = $result->fetch_assoc();
-        // Ensure VRN is available
-        if (!isset($settings['vrn_number']) || empty($settings['vrn_number'])) {
-            $settings['vrn_number'] = 'Not Registered';
-        }
         return $settings;
     }
     return [
@@ -165,11 +168,20 @@ function getCompanySettingsForInvoice($conn) {
         'company_email' => '',
         'company_phone' => '',
         'company_tin' => '',
-        'vrn_number' => 'Not Registered',
+        'vrn_number' => '',
         'currency_symbol' => 'TZS',
         'logo_url' => null
     ];
 }
+
+$company_settings = getCompanySettingsForInvoice($conn);
+
+// The invoice VAT is controlled by the company's VRN registration status.
+// Nil/None variants are treated as inactive, regardless of letter case or spaces.
+$vrn_value = trim((string)($company_settings['vrn_number'] ?? ''));
+$normalized_vrn = strtolower($vrn_value);
+$inactive_vrn_values = ['', '0', 'nil', 'nill', 'none'];
+$vrn_is_inactive = in_array($normalized_vrn, $inactive_vrn_values, true);
 
 // Initialize variables
 $invoice_message = '';
@@ -232,8 +244,13 @@ if (isset($_POST['inv_add']) && !canAdd($conn, $user_role_id, $module_name)) {
         
         // Calculate financials
         $subtotal = $quantity * $rate;
-        $vat = $subtotal * 0.18;
-        $total = $subtotal + $vat;
+        // VAT is submitted as a percentage. VRN-inactive companies always use zero.
+        $vat_percentage = max(0.0, min(100.0, (float)($_POST['vat_percentage'] ?? 18)));
+        $vat = $vrn_is_inactive ? 0.0 : round($subtotal * ($vat_percentage / 100), 2);
+        // Withholding Tax is always editable and is stored as its calculated amount.
+        $withholding_percentage = max(0.0, min(100.0, (float)($_POST['withholding_tax_percentage'] ?? 5)));
+        $withholding_tax = round($subtotal * ($withholding_percentage / 100), 2);
+        $total = round($subtotal + $vat - $withholding_tax, 2);
         
         // Validate inputs
         $errors = [];
@@ -284,12 +301,12 @@ if (isset($_POST['inv_add']) && !canAdd($conn, $user_role_id, $module_name)) {
             // Corrected: "sisssiddddsssss" - particulars, bank_name, account_number, account_name, status are all strings
             $insert_stmt = $conn->prepare("INSERT INTO invoices (
                 invoice_number, customer_id, invoice_date, due_date, particulars,
-                quantity, rate, subtotal, vat, total, bank_name, account_number, account_name, status, created_by
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
+                quantity, rate, subtotal, vat, withholding_tax, total, bank_name, account_number, account_name, status, created_by
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
             
-            $insert_stmt->bind_param("sisssiddddsssss", 
+            $insert_stmt->bind_param("sisssidddddsssss",
                 $invoice_number, $customer_id, $invoice_date, $due_date, $particulars,
-                $quantity, $rate, $subtotal, $vat, $total, $bank_name, $account_number, $account_name, $status, $created_by
+                $quantity, $rate, $subtotal, $vat, $withholding_tax, $total, $bank_name, $account_number, $account_name, $status, $created_by
             );
             
             if ($insert_stmt->execute()) {
@@ -332,8 +349,13 @@ if (isset($_POST['inv_update']) && !canEdit($conn, $user_role_id, $module_name))
         
         // Calculate financials
         $subtotal = $quantity * $rate;
-        $vat = $subtotal * 0.18;
-        $total = $subtotal + $vat;
+        // VAT is submitted as a percentage. VRN-inactive companies always use zero.
+        $vat_percentage = max(0.0, min(100.0, (float)($_POST['vat_percentage'] ?? 18)));
+        $vat = $vrn_is_inactive ? 0.0 : round($subtotal * ($vat_percentage / 100), 2);
+        // Withholding Tax is always editable and is stored as its calculated amount.
+        $withholding_percentage = max(0.0, min(100.0, (float)($_POST['withholding_tax_percentage'] ?? 5)));
+        $withholding_tax = round($subtotal * ($withholding_percentage / 100), 2);
+        $total = round($subtotal + $vat - $withholding_tax, 2);
         
         $errors = [];
         
@@ -387,13 +409,13 @@ if (isset($_POST['inv_update']) && !canEdit($conn, $user_role_id, $module_name))
             // Corrected: "isssiddddsssss" - all string fields use 's' type
             $update_stmt = $conn->prepare("UPDATE invoices SET 
                 customer_id = ?, invoice_date = ?, due_date = ?, particulars = ?,
-                quantity = ?, rate = ?, subtotal = ?, vat = ?, total = ?,
+                quantity = ?, rate = ?, subtotal = ?, vat = ?, withholding_tax = ?, total = ?,
                 bank_name = ?, account_number = ?, account_name = ?, status = ?
                 WHERE id = ?");
             
-            $update_stmt->bind_param("isssiddddssssi", 
+            $update_stmt->bind_param("isssidddddssssi",
                 $customer_id, $invoice_date, $due_date, $particulars,
-                $quantity, $rate, $subtotal, $vat, $total,
+                $quantity, $rate, $subtotal, $vat, $withholding_tax, $total,
                 $bank_name, $account_number, $account_name, $status, $id
             );
             
@@ -594,7 +616,6 @@ if ($invoices_result && $invoices_result->num_rows > 0) {
     $invoices_result = $invoices_stmt->get_result();
 }
 
-$company_settings = getCompanySettingsForInvoice($conn);
 ?>
 
 <!-- INVOICE TRANSLATIONS -->
@@ -1097,6 +1118,22 @@ window.updateInvoiceLanguage = updateInvoiceLanguage;
         border-radius: 8px;
         padding: 12px;
         text-align: center;
+        border: 1px solid var(--gray-200);
+    }
+
+    .inv-financial-item.inv-tax-card {
+        background: linear-gradient(135deg, #f8fafc 0%, #eef2ff 100%);
+        border-color: #cbd5e1;
+    }
+
+    .inv-financial-item.inv-tax-card-vat {
+        background: linear-gradient(135deg, #fff 0%, #ecfdf5 100%);
+        border-color: #bbf7d0;
+    }
+
+    .inv-financial-item.inv-tax-card-wht {
+        background: linear-gradient(135deg, #fff 0%, #fff7ed 100%);
+        border-color: #fed7aa;
     }
 
     .inv-financial-label {
@@ -1681,6 +1718,36 @@ window.updateInvoiceLanguage = updateInvoiceLanguage;
         font-size: 13px;
     }
 
+    .inv-modal-tax-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+        gap: 8px;
+        margin: 8px 0;
+    }
+
+    .inv-modal-tax-card {
+        border-radius: 8px;
+        padding: 9px 12px;
+        border: 1px solid;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 10px;
+        font-size: 12px;
+    }
+
+    .inv-modal-tax-card-vat {
+        background: #ecfdf5;
+        border-color: #bbf7d0;
+        color: #166534;
+    }
+
+    .inv-modal-tax-card-wht {
+        background: #fff7ed;
+        border-color: #fed7aa;
+        color: #9a3412;
+    }
+
     .inv-modal-invoice-financial-label {
         font-weight: 500;
         color: var(--gray-700);
@@ -1758,7 +1825,7 @@ window.updateInvoiceLanguage = updateInvoiceLanguage;
         }
         @page {
             size: A4;
-            margin: 0.5in;
+            margin: 0.4in;
         }
         .inv-modal-invoice-table th,
         .inv-modal-invoice-table td {
@@ -1915,6 +1982,33 @@ window.updateInvoiceLanguage = updateInvoiceLanguage;
                            value="<?= $edit_mode ? $edit_data['rate'] : '0.00' ?>" 
                            min="0.01" required oninput="inv_updateFinancialSummary()">
                 </div>
+
+                <!-- VAT follows the company VRN registration status -->
+                <div class="inv-form-group">
+                    <label for="inv_vat" data-inv-lang="vatLabel">VAT (18%)</label>
+                    <input type="number" step="0.01" id="inv_vat" name="vat_percentage"
+                           value="<?= $vrn_is_inactive ? '' : (
+                               $edit_mode && (float)($edit_data['subtotal'] ?? 0) > 0
+                                   ? number_format(((float)($edit_data['vat'] ?? 0) / (float)$edit_data['subtotal']) * 100, 2, '.', '')
+                                   : '18.00'
+                           ) ?>"
+                           min="0" max="100" <?= $vrn_is_inactive ? 'readonly disabled' : '' ?>
+                           oninput="inv_updateFinancialSummary(true)"
+                           <?= $vrn_is_inactive ? 'style="background:#e5e7eb;color:#6b7280;cursor:not-allowed;"' : '' ?>>
+                    <?php if ($vrn_is_inactive): ?>
+                        <small style="display:block;color:#64748b;margin-top:4px;">VAT is unavailable because the company VRN is not registered.</small>
+                    <?php endif; ?>
+                </div>
+
+                <!-- Withholding Tax is percentage-based and remains editable in every VRN scenario -->
+                <div class="inv-form-group">
+                    <label for="inv_withholding_tax">Withholding Tax (%)</label>
+                    <input type="number" step="0.01" id="inv_withholding_tax" name="withholding_tax_percentage"
+                           value="<?= $edit_mode && (float)($edit_data['subtotal'] ?? 0) > 0
+                               ? number_format(((float)($edit_data['withholding_tax'] ?? 0) / (float)$edit_data['subtotal']) * 100, 2, '.', '')
+                               : '5.00' ?>"
+                           min="0" max="100" oninput="inv_updateFinancialSummary(true)">
+                </div>
                 
                 <!-- Bank Name -->
                 <div class="inv-form-group">
@@ -1967,9 +2061,13 @@ window.updateInvoiceLanguage = updateInvoiceLanguage;
                         <div class="inv-financial-label" data-inv-lang="subtotalLabel">Subtotal</div>
                         <div class="inv-financial-value" id="inv_subtotalDisplay">0.00</div>
                     </div>
-                    <div class="inv-financial-item">
-                        <div class="inv-financial-label" data-inv-lang="vatLabel">VAT (18%)</div>
+                    <div class="inv-financial-item inv-tax-card inv-tax-card-vat" id="inv_vatCard">
+                        <div class="inv-financial-label" id="inv_vatLabel" data-inv-lang="vatLabel">VAT (18%)</div>
                         <div class="inv-financial-value" id="inv_vatDisplay">0.00</div>
+                    </div>
+                    <div class="inv-financial-item inv-tax-card inv-tax-card-wht" id="inv_whtRow">
+                        <div class="inv-financial-label" id="inv_whtLabel">Withholding Tax (5%)</div>
+                        <div class="inv-financial-value" id="inv_whtDisplay">0.00</div>
                     </div>
                     <div class="inv-financial-item">
                         <div class="inv-financial-label" data-inv-lang="grandTotal">GRAND TOTAL</div>
@@ -1979,7 +2077,6 @@ window.updateInvoiceLanguage = updateInvoiceLanguage;
             </div>
             
             <input type="hidden" name="subtotal" id="inv_subtotal" value="0">
-            <input type="hidden" name="vat" id="inv_vat" value="0">
             <input type="hidden" name="total" id="inv_total" value="0">
             
             <div class="inv-form-actions">
@@ -2122,6 +2219,7 @@ window.updateInvoiceLanguage = updateInvoiceLanguage;
                             'rate' => $row['rate'],
                             'subtotal' => $row['subtotal'],
                             'vat' => $row['vat'],
+                            'withholding_tax' => $row['withholding_tax'] ?? 0,
                             'total' => $row['total'],
                             'bank_name' => $row['bank_name'],
                             'account_number' => $row['account_number'],
@@ -2180,6 +2278,7 @@ window.updateInvoiceLanguage = updateInvoiceLanguage;
                                                 'rate' => $row['rate'],
                                                 'subtotal' => $row['subtotal'],
                                                 'vat' => $row['vat'],
+                                                'withholding_tax' => $row['withholding_tax'] ?? 0,
                                                 'total' => $row['total'],
                                                 'bank_name' => $row['bank_name'],
                                                 'account_number' => $row['account_number'],
@@ -2268,6 +2367,7 @@ window.updateInvoiceLanguage = updateInvoiceLanguage;
         'currency_symbol' => $company_settings['currency_symbol'] ?? 'TZS',
         'logo_url' => $company_settings['logo_url'] ?? null
     ]); ?>;
+    const inv_vrnInactive = <?= $vrn_is_inactive ? 'true' : 'false' ?>;
     
     // Format money with currency symbol
     function inv_formatMoney(value) {
@@ -2281,20 +2381,41 @@ window.updateInvoiceLanguage = updateInvoiceLanguage;
     }
     
     // Update financial summary in real-time
-    function inv_updateFinancialSummary() {
+    function inv_updateFinancialSummary(manualVat = false, preserveVat = false) {
         const quantity = parseInt(document.getElementById('inv_quantity').value) || 0;
         const rate = parseFloat(document.getElementById('inv_rate').value) || 0;
         
         const subtotal = quantity * rate;
-        const vat = subtotal * 0.18;
-        const total = subtotal + vat;
+        const vatInput = document.getElementById('inv_vat');
+        const whtInput = document.getElementById('inv_withholding_tax');
+        let vat;
+
+        if (inv_vrnInactive) {
+            vat = 0;
+            vatInput.value = '';
+        } else if (preserveVat && vatInput.value !== '') {
+            vat = subtotal * ((parseFloat(vatInput.value) || 0) / 100);
+        } else if (!manualVat || vatInput.value === '') {
+            vatInput.value = '18.00';
+            vat = subtotal * 0.18;
+        } else {
+            vat = subtotal * ((parseFloat(vatInput.value) || 0) / 100);
+        }
+        const withholdingTax = subtotal * ((parseFloat(whtInput.value) || 0) / 100);
+        const total = subtotal + vat - withholdingTax;
         
         document.getElementById('inv_subtotalDisplay').textContent = inv_formatMoney(subtotal);
         document.getElementById('inv_vatDisplay').textContent = inv_formatMoney(vat);
+        document.getElementById('inv_whtDisplay').textContent = inv_formatMoney(withholdingTax);
         document.getElementById('inv_totalDisplay').textContent = inv_formatMoney(total);
+        document.getElementById('inv_vatCard').style.display = vat > 0 ? 'block' : 'none';
+        document.getElementById('inv_whtRow').style.display = withholdingTax > 0 ? 'block' : 'none';
+        document.getElementById('inv_vatLabel').textContent =
+            inv_vrnInactive ? 'VAT (0%)' : `VAT (${(parseFloat(vatInput.value) || 0).toFixed(2)}%)`;
+        document.getElementById('inv_whtLabel').textContent =
+            `Withholding Tax (${(parseFloat(whtInput.value) || 0).toFixed(2)}%)`;
         
         document.getElementById('inv_subtotal').value = subtotal.toFixed(2);
-        document.getElementById('inv_vat').value = vat.toFixed(2);
         document.getElementById('inv_total').value = total.toFixed(2);
     }
     
@@ -2532,6 +2653,7 @@ window.updateInvoiceLanguage = updateInvoiceLanguage;
             // Parse financial values
             const subtotal = parseFloat(invoice.subtotal) || 0;
             const vat = parseFloat(invoice.vat) || 0;
+            const withholdingTax = parseFloat(invoice.withholding_tax) || 0;
             const total = parseFloat(invoice.total) || 0;
             const quantity = parseInt(invoice.quantity) || 0;
             const rate = parseFloat(invoice.rate) || 0;
@@ -2625,9 +2747,15 @@ window.updateInvoiceLanguage = updateInvoiceLanguage;
                                 <span class="inv-modal-invoice-financial-label">${t.subtotalLabel || 'Subtotal'}:</span>
                                 <span class="inv-modal-invoice-financial-value">${inv_formatMoney(subtotal)}</span>
                             </div>
-                            <div class="inv-modal-invoice-financial-item">
-                                <span class="inv-modal-invoice-financial-label">${t.vatLabel || 'VAT (18%)'}:</span>
-                                <span class="inv-modal-invoice-financial-value">${inv_formatMoney(vat)}</span>
+                            <div class="inv-modal-tax-grid">
+                                ${vat > 0 ? `<div class="inv-modal-tax-card inv-modal-tax-card-vat">
+                                    <span class="inv-modal-invoice-financial-label">VAT (${subtotal > 0 ? ((vat / subtotal) * 100).toFixed(2) : '0.00'}%):</span>
+                                    <span class="inv-modal-invoice-financial-value">${inv_formatMoney(vat)}</span>
+                                </div>` : ''}
+                                ${withholdingTax > 0 ? `<div class="inv-modal-tax-card inv-modal-tax-card-wht">
+                                    <span class="inv-modal-invoice-financial-label">Withholding Tax (${subtotal > 0 ? ((withholdingTax / subtotal) * 100).toFixed(2) : '0.00'}%):</span>
+                                    <span class="inv-modal-invoice-financial-value">${inv_formatMoney(withholdingTax)}</span>
+                                </div>` : ''}
                             </div>
                             <div class="inv-modal-invoice-financial-item inv-modal-invoice-total-row">
                                 <span class="inv-modal-invoice-financial-label">${t.grandTotal || 'GRAND TOTAL'}:</span>
@@ -2868,6 +2996,36 @@ window.updateInvoiceLanguage = updateInvoiceLanguage;
                         padding: 6px 0;
                         font-size: 12px;
                     }
+
+                    .inv-modal-tax-grid {
+                        display: grid;
+                        grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+                        gap: 8px;
+                        margin: 8px 0;
+                    }
+
+                    .inv-modal-tax-card {
+                        border-radius: 8px;
+                        padding: 9px 12px;
+                        border: 1px solid;
+                        display: flex;
+                        justify-content: space-between;
+                        align-items: center;
+                        gap: 10px;
+                        font-size: 12px;
+                    }
+
+                    .inv-modal-tax-card-vat {
+                        background: #ecfdf5;
+                        border-color: #bbf7d0;
+                        color: #166534;
+                    }
+
+                    .inv-modal-tax-card-wht {
+                        background: #fff7ed;
+                        border-color: #fed7aa;
+                        color: #9a3412;
+                    }
                     
                     .inv-modal-invoice-financial-label {
                         font-weight: 500;
@@ -2917,6 +3075,55 @@ window.updateInvoiceLanguage = updateInvoiceLanguage;
                             size: A4;
                             margin: 0.4in;
                         }
+                        .inv-modal-invoice-header {
+                            padding: 6px 10px;
+                            margin-bottom: 8px;
+                        }
+                        .inv-modal-invoice-logo {
+                            max-width: 55px;
+                            max-height: 55px;
+                            margin-bottom: 4px;
+                        }
+                        .inv-modal-invoice-title {
+                            margin: 8px 0;
+                            padding: 5px;
+                        }
+                        .inv-modal-invoice-section {
+                            margin-bottom: 8px;
+                        }
+                        .inv-modal-invoice-section-content {
+                            padding: 6px 10px;
+                        }
+                        .inv-modal-invoice-row,
+                        .inv-modal-invoice-financial-item {
+                            padding: 2px 0;
+                            font-size: 10px;
+                        }
+                        .inv-modal-tax-grid {
+                            gap: 5px;
+                            margin: 5px 0;
+                        }
+                        .inv-modal-tax-card {
+                            padding: 6px 8px;
+                            font-size: 10px;
+                        }
+                        .inv-modal-invoice-table {
+                            margin: 8px 0;
+                        }
+                        .inv-modal-invoice-table th {
+                            padding: 5px;
+                        }
+                        .inv-modal-invoice-table td {
+                            padding: 4px 5px;
+                        }
+                        .inv-modal-invoice-signature {
+                            margin-top: 12px;
+                            padding-top: 8px;
+                        }
+                        nav, header, footer, button, .inv-modal-header, .inv-modal-footer,
+                        .navbar, .sidebar, .btn, .inv-form-actions, .inv-modal-close {
+                            display: none !important;
+                        }
                     }
                 </style>
             </head>
@@ -2960,7 +3167,7 @@ window.updateInvoiceLanguage = updateInvoiceLanguage;
     // Initialize on page load (NO SIDEBAR CODE - ISSUE #1 resolved)
     document.addEventListener('DOMContentLoaded', function() {
         <?php if ($edit_mode): ?>
-            inv_updateFinancialSummary();
+            inv_updateFinancialSummary(false, true);
             const editCustomerId = <?= json_encode($edit_data['customer_id'] ?? '') ?>;
             if (editCustomerId) inv_loadCustomerDetails(editCustomerId);
         <?php endif; ?>
