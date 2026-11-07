@@ -322,7 +322,7 @@ $baseUrl = rtrim(getenv('APP_BASE_URL') ?: 'https://system.shehita.co.tz', '/');
 
     <?php else: ?>
 
-        <h1>Create your company account</h1>
+        <h1>Start your free trial</h1>
         <p class="lede">
             Tell us your company name and upload your logo. We will build your own management
             system — with your branding — and start a <?= (int)default_trial_days() ?>-day free trial
