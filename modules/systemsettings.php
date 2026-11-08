@@ -488,14 +488,15 @@ window.updateSystemLanguage = updateSystemLanguage;
     .sys-alert-danger {
         background: #f8d7da;
         color: #721c24;
+        border: 1px solid #f5c6cb;
     }
 
     .sys-alert-warning {
         background: #fff3cd;
         color: #664d03;
         border: 1px solid #ffe69c;
-        border: 1px solid #f5c6cb;
     }
+    
     
     .sys-alert-close {
         background: none;
