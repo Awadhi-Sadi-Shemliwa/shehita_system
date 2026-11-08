@@ -105,13 +105,6 @@ if ($check_column && $check_column->num_rows == 0) {
     $conn->query($alter_sql);
 }
 
-// Add Withholding Tax storage for existing installations.
-$check_wht_column = $conn->query("SHOW COLUMNS FROM invoices LIKE 'withholding_tax'");
-if ($check_wht_column && $check_wht_column->num_rows == 0) {
-    $alter_sql = "ALTER TABLE invoices ADD COLUMN withholding_tax DECIMAL(15,2) NOT NULL DEFAULT 0.00 AFTER vat";
-    $conn->query($alter_sql);
-}
-
 /**
  * ============================================================================
  * CSRF PROTECTION
@@ -179,8 +172,8 @@ $company_settings = getCompanySettingsForInvoice($conn);
 // The invoice VAT is controlled by the company's VRN registration status.
 // Nil/None variants are treated as inactive, regardless of letter case or spaces.
 $vrn_value = trim((string)($company_settings['vrn_number'] ?? ''));
-$normalized_vrn = strtolower($vrn_value);
-$inactive_vrn_values = ['', '0', 'nil', 'nill', 'none'];
+$normalized_vrn = strtolower(preg_replace('/[\s\-\._\/]+/', '', $vrn_value));
+$inactive_vrn_values = ['', '0', 'nil', 'nill', 'none', 'na', 'notregistered', 'unregistered', 'notapplicable'];
 $vrn_is_inactive = in_array($normalized_vrn, $inactive_vrn_values, true);
 
 // Initialize variables

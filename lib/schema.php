@@ -40,7 +40,7 @@
  * run_tenant_migrations() below, which is what actually makes a change roll out
  * across every company's database.
  */
-const TENANT_SCHEMA_VERSION = '2026.08.23.2';
+const TENANT_SCHEMA_VERSION = '2026.11.08.1';
 
 /**
  * Create/verify every table in a tenant database.
@@ -303,6 +303,15 @@ function run_tenant_migrations(mysqli $conn): bool
     //         $ok = false;
     //     }
     // }
+
+    // 2026-11-08: invoices gained a withholding-tax amount. Additive only: a new
+    // column with a default, so existing rows stay valid and older code keeps working.
+    if (!tenant_column_exists($conn, 'invoices', 'withholding_tax')) {
+        if (!$conn->query("ALTER TABLE invoices ADD COLUMN withholding_tax DECIMAL(15,2) NOT NULL DEFAULT 0.00 AFTER vat")) {
+            error_log('tenant migration: add invoices.withholding_tax: ' . $conn->error);
+            $ok = false;
+        }
+    }
 
     return $ok;
 }
