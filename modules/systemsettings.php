@@ -31,6 +31,10 @@ global $conn;
 $user_role_id = $_SESSION['role_id'] ?? 0;
 $module_name = 'systemsettings';
 
+// System Settings is intentionally read-only in this module.
+// Keep update/reset handlers intact, but prevent any POST request from changing values.
+$system_settings_readonly = true;
+
 // PERMISSION: Check if user has view permission
 if (!canView($conn, $user_role_id, $module_name)) {
     echo '<div class="sys-alert sys-alert-danger" style="text-align: center; padding: 40px;">
@@ -123,6 +127,12 @@ if (empty($_SESSION['csrf_token'])) {
 // Initialize variables for messages
 $settings_message = '';
 $settings_message_type = '';
+
+if ($system_settings_readonly && (isset($_POST['sys_update']) || isset($_POST['sys_reset']))) {
+    $settings_message = 'System Settings is read-only. No changes were saved.';
+    $settings_message_type = 'warning';
+    unset($_POST['sys_update'], $_POST['sys_reset']);
+}
 
 /**
  * ============================================================================
@@ -276,7 +286,7 @@ foreach ($settings_data as $setting) {
 const system_translations = {
     en: {
         pageTitle: 'System Settings',
-        pageSubtitle: 'Configure global system preferences',
+        pageSubtitle: 'View global system preferences',
         saveSettings: 'Save Settings',
         resetDefaults: 'Reset to Defaults',
         resetConfirm: 'Are you sure you want to reset all settings to default values? This action cannot be undone.',
@@ -320,7 +330,7 @@ const system_translations = {
     },
     sw: {
         pageTitle: 'Mipangilio ya Mfumo',
-        pageSubtitle: 'Sanidi mapendeleo ya mfumo kwa ujumla',
+        pageSubtitle: 'Tazama mapendeleo ya mfumo kwa ujumla',
         saveSettings: 'Hifadhi Mipangilio',
         resetDefaults: 'Rudisha Chaguo-msingi',
         resetConfirm: 'Una uhakika unataka kurudisha mipangilio yote kwenye chaguo-msingi? Kitendo hiki hakiwezi kutenguliwa.',
@@ -480,6 +490,13 @@ window.updateSystemLanguage = updateSystemLanguage;
         color: #721c24;
         border: 1px solid #f5c6cb;
     }
+
+    .sys-alert-warning {
+        background: #fff3cd;
+        color: #664d03;
+        border: 1px solid #ffe69c;
+    }
+    
     
     .sys-alert-close {
         background: none;
@@ -790,7 +807,7 @@ window.updateSystemLanguage = updateSystemLanguage;
     <!-- Header -->
     <div class="sys-header">
         <h2 data-sys-lang="pageTitle">System Settings</h2>
-        <p data-sys-lang="pageSubtitle">Configure global system preferences</p>
+        <p data-sys-lang="pageSubtitle">View global system preferences</p>
     </div>
     
     <!-- Alert Messages -->
@@ -802,7 +819,7 @@ window.updateSystemLanguage = updateSystemLanguage;
     <?php endif; ?>
     
     <!-- Settings Form -->
-    <?php if (canEdit($conn, $user_role_id, $module_name)): ?>
+    <?php if (!$system_settings_readonly && canEdit($conn, $user_role_id, $module_name)): ?>
     <form method="POST" action="?page=systemsettings" id="sysSettingsForm">
         <input type="hidden" name="csrf_token" value="<?= $_SESSION['csrf_token'] ?>">
         
