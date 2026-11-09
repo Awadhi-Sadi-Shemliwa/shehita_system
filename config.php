@@ -2,9 +2,20 @@
 /**
  * SHEHITA Enterprise Management System
  * Configuration File - Database connection and helper functions
- * 
- * ENHANCED: Added permission helper functions for role-based access control
+ *
+ * MULTI-TENANT: this no longer connects to one fixed database. It connects to
+ * the database belonging to the company resolved by bootstrap.php (TENANT_DB).
+ * Because every module reads `global $conn`, that single change scopes the
+ * entire application to one company with no changes inside modules/.
+ *
+ * The table definitions that used to live inline here now live in
+ * lib/schema.php, so that signup.php can build a brand-new company's database
+ * from the same single definition.
+ *
+ * Usage stays exactly as before:  $conn = require_once 'config.php';
  */
+
+require_once __DIR__ . '/lib/schema.php';
 
 // Environment-aware error reporting.
 // Set APP_ENV=production on the server so internal errors are logged but
@@ -20,10 +31,14 @@ ini_set('display_errors', $appEnv === 'development' ? '1' : '0');
 $host     = getenv('DB_HOST')     ?: '';
 $username = getenv('DB_USER')     ?: '';
 $password = getenv('DB_PASSWORD') ?: '';
-$database = getenv('DB_NAME')     ?: '';
+
+// Which database? Normally the tenant resolved by bootstrap.php. DB_NAME is
+// honoured only as a fallback for scripts that run outside a web request
+// (cron, one-off maintenance) and for single-tenant installs mid-migration.
+$database = defined('TENANT_DB') ? TENANT_DB : (getenv('DB_NAME') ?: '');
 
 if ($host === '' || $username === '' || $database === '') {
-    error_log('config.php: missing required DB env vars (DB_HOST/DB_USER/DB_NAME).');
+    error_log('config.php: missing required DB env vars (DB_HOST/DB_USER) or no tenant resolved.');
     http_response_code(500);
     die('Service temporarily unavailable.');
 }
@@ -40,340 +55,36 @@ if ($conn->connect_error) {
 }
 
 // Create database if it doesn't exist
-$conn->query("CREATE DATABASE IF NOT EXISTS $database");
+$conn->query("CREATE DATABASE IF NOT EXISTS `" . str_replace('`', '', $database) . "`");
 $conn->select_db($database);
 $conn->set_charset("utf8mb4");
 
 /**
- * Create tables if they don't exist
- */
-
-// Departments table
-$conn->query("CREATE TABLE IF NOT EXISTS departments (
-    id INT(11) UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-    name VARCHAR(255) NOT NULL,
-    description TEXT,
-    status ENUM('Active', 'Inactive') DEFAULT 'Active',
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
-
-// Roles table
-$conn->query("CREATE TABLE IF NOT EXISTS roles (
-    id INT(11) UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-    name VARCHAR(100) NOT NULL,
-    department_id INT(11) UNSIGNED NOT NULL,
-    status ENUM('Active', 'Inactive') DEFAULT 'Active',
-    description TEXT,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    FOREIGN KEY (department_id) REFERENCES departments(id) ON DELETE RESTRICT,
-    UNIQUE KEY unique_role_per_department (name, department_id)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
-
-// Users table with security_question and security_answer columns
-$conn->query("CREATE TABLE IF NOT EXISTS users (
-    id INT(11) UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-    name VARCHAR(255) NOT NULL,
-    email VARCHAR(255) NOT NULL UNIQUE,
-    password VARCHAR(255) NOT NULL,
-    phone VARCHAR(20) DEFAULT NULL,
-    address TEXT DEFAULT NULL,
-    profile_image VARCHAR(255) DEFAULT NULL,
-    department_id INT(11) UNSIGNED DEFAULT NULL,
-    role_id INT(11) UNSIGNED DEFAULT NULL,
-    status ENUM('Active', 'Inactive') DEFAULT 'Inactive',
-    security_question TEXT DEFAULT NULL,
-    security_answer VARCHAR(255) DEFAULT NULL,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    FOREIGN KEY (department_id) REFERENCES departments(id) ON DELETE SET NULL,
-    FOREIGN KEY (role_id) REFERENCES roles(id) ON DELETE SET NULL
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
-
-// Permissions table (ensure it exists with all columns)
-$conn->query("CREATE TABLE IF NOT EXISTS permissions (
-    id INT(11) UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-    role_id INT(11) UNSIGNED NOT NULL,
-    department_id INT(11) UNSIGNED NULL,
-    module_name VARCHAR(100) NOT NULL,
-    can_view TINYINT(1) DEFAULT 0,
-    can_add TINYINT(1) DEFAULT 0,
-    can_edit TINYINT(1) DEFAULT 0,
-    can_delete TINYINT(1) DEFAULT 0,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    FOREIGN KEY (role_id) REFERENCES roles(id) ON DELETE CASCADE,
-    FOREIGN KEY (department_id) REFERENCES departments(id) ON DELETE CASCADE,
-    UNIQUE KEY unique_role_module (role_id, module_name),
-    INDEX idx_module (module_name),
-    INDEX idx_role (role_id),
-    INDEX idx_department (department_id)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
-
-/**
- * ============================================================================
- * CENTRALIZED SCHEMA - Business / feature tables
- * ----------------------------------------------------------------------------
- * All tables are created here, at bootstrap, in strict foreign-key dependency
- * order (parents before children). Previously each module created its own table
- * on first visit, which made fresh deployments fragile: opening a child module
- * (e.g. projects) before its parent (customers) caused the CREATE TABLE to fail.
- * Creating everything centrally removes that ordering dependency.
+ * Create/verify this company's tables.
  *
- * Dependency order:
- *   departments -> roles -> users -> permissions   (created above)
- *   projectgroup -> categories
- *   customers
- *   company_settings, system_settings (standalone)
- *   projects (-> customers), invoices (-> customers)
- *   operations (-> projectgroup, categories)
- * ============================================================================
+ * Cheap after the first run: ensure_tenant_schema() records the applied schema
+ * version in the tenant database and skips the DDL pass when it matches, so the
+ * steady-state cost is one SELECT rather than the twelve CREATE TABLE
+ * statements this file used to issue on every single request.
+ *
+ * Bumping TENANT_SCHEMA_VERSION in lib/schema.php re-runs the DDL for every
+ * company on their next request — which is how schema changes roll out across
+ * all tenant databases.
  */
-
-// Project groups (parent of categories)
-$conn->query("CREATE TABLE IF NOT EXISTS projectgroup (
-    id INT(11) UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-    name VARCHAR(255) NOT NULL,
-    status ENUM('Active', 'Inactive') DEFAULT 'Active',
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    INDEX idx_status (status)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci AUTO_INCREMENT=1");
-
-// Categories (belong to a project group)
-$conn->query("CREATE TABLE IF NOT EXISTS categories (
-    id INT(11) UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-    projectgroup_id INT(11) UNSIGNED NOT NULL,
-    name VARCHAR(255) NOT NULL,
-    status ENUM('Active', 'Inactive') DEFAULT 'Active',
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    INDEX idx_projectgroup (projectgroup_id),
-    INDEX idx_status (status),
-    FOREIGN KEY (projectgroup_id) REFERENCES projectgroup(id) ON DELETE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci AUTO_INCREMENT=1");
-
-// Customers / clients (parent of projects and invoices)
-$conn->query("CREATE TABLE IF NOT EXISTS customers (
-    id INT(11) UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-    customer_name VARCHAR(255) NOT NULL,
-    contact_person VARCHAR(255) DEFAULT NULL,
-    tin_number VARCHAR(50) DEFAULT NULL,
-    vrn_number VARCHAR(50) DEFAULT NULL,
-    address TEXT DEFAULT NULL,
-    email VARCHAR(255) DEFAULT NULL,
-    type_of_business ENUM('Individual', 'Sole Proprietorship', 'Partnership', 'Limited Company', 'Corporation', 'Non-Profit', 'Government', 'Other') DEFAULT 'Individual',
-    status ENUM('Active', 'Inactive') DEFAULT 'Active',
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    INDEX idx_customer_name (customer_name),
-    INDEX idx_status (status),
-    INDEX idx_email (email),
-    INDEX idx_type (type_of_business),
-    INDEX idx_vrn_number (vrn_number)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci AUTO_INCREMENT=1");
-
-// Company settings (single-row configuration table)
-$conn->query("CREATE TABLE IF NOT EXISTS company_settings (
-    id INT(11) UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-    company_name VARCHAR(255) NOT NULL,
-    company_address TEXT NOT NULL,
-    company_email VARCHAR(255) NOT NULL,
-    company_phone VARCHAR(50) NOT NULL,
-    company_tin VARCHAR(100) NOT NULL,
-    vrn_number VARCHAR(50) DEFAULT NULL,
-    currency_symbol VARCHAR(5) NOT NULL DEFAULT 'TZS',
-    logo_url VARCHAR(500) DEFAULT NULL,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci AUTO_INCREMENT=1");
-
-// System settings (global key/value configuration)
-$conn->query("CREATE TABLE IF NOT EXISTS system_settings (
-    id INT(11) UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-    setting_key VARCHAR(100) NOT NULL UNIQUE,
-    setting_value TEXT,
-    setting_type ENUM('text', 'textarea', 'number', 'toggle', 'select', 'email') DEFAULT 'text',
-    display_name VARCHAR(255) NOT NULL,
-    description TEXT,
-    options JSON NULL,
-    sort_order INT(11) DEFAULT 0,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    INDEX idx_key (setting_key),
-    INDEX idx_sort (sort_order)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci");
-
-// Projects / contracts (child of customers)
-$conn->query("CREATE TABLE IF NOT EXISTS projects (
-    id INT(11) UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-    contract_number VARCHAR(50) NOT NULL UNIQUE,
-    client_id INT(11) UNSIGNED NOT NULL,
-    effective_date DATE NOT NULL,
-    end_date DATE NOT NULL,
-    contract_value DECIMAL(15,2) NOT NULL DEFAULT 0.00,
-    tax DECIMAL(15,2) NOT NULL DEFAULT 0.00,
-    commission DECIMAL(15,2) NOT NULL DEFAULT 0.00,
-    cost_of_project DECIMAL(15,2) NOT NULL DEFAULT 0.00,
-    staff_cost DECIMAL(15,2) NOT NULL DEFAULT 0.00,
-    overhead_cost DECIMAL(15,2) NOT NULL DEFAULT 0.00,
-    number_of_staff_allocated INT(11) NOT NULL DEFAULT 0,
-    target_profit DECIMAL(15,2) NOT NULL DEFAULT 0.00,
-    actual_profit DECIMAL(15,2) NOT NULL DEFAULT 0.00,
-    profit_difference DECIMAL(15,2) NOT NULL DEFAULT 0.00,
-    status ENUM('Active', 'Expired', 'Inactive') DEFAULT 'Active',
-    created_by VARCHAR(255) NOT NULL,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    INDEX idx_client (client_id),
-    INDEX idx_status (status),
-    INDEX idx_contract_number (contract_number),
-    INDEX idx_dates (effective_date, end_date),
-    FOREIGN KEY (client_id) REFERENCES customers(id) ON DELETE RESTRICT
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci AUTO_INCREMENT=1");
-
-// Invoices (child of customers)
-$conn->query("CREATE TABLE IF NOT EXISTS invoices (
-    id INT(11) UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-    invoice_number VARCHAR(50) NOT NULL UNIQUE,
-    customer_id INT(11) UNSIGNED NOT NULL,
-    invoice_date DATE NOT NULL,
-    due_date DATE NOT NULL,
-    particulars TEXT NOT NULL,
-    quantity INT(11) NOT NULL DEFAULT 1,
-    rate DECIMAL(15,2) NOT NULL DEFAULT 0.00,
-    subtotal DECIMAL(15,2) NOT NULL DEFAULT 0.00,
-    vat DECIMAL(15,2) NOT NULL DEFAULT 0.00,
-    total DECIMAL(15,2) NOT NULL DEFAULT 0.00,
-    bank_name VARCHAR(255) NOT NULL,
-    account_number VARCHAR(100) NOT NULL,
-    account_name VARCHAR(255) DEFAULT NULL,
-    status ENUM('Paid', 'Unpaid', 'Partially Paid') DEFAULT 'Unpaid',
-    created_by VARCHAR(255) NOT NULL,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    INDEX idx_invoice_number (invoice_number),
-    INDEX idx_customer (customer_id),
-    INDEX idx_status (status),
-    INDEX idx_dates (invoice_date, due_date),
-    FOREIGN KEY (customer_id) REFERENCES customers(id) ON DELETE RESTRICT
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci AUTO_INCREMENT=1");
-
-// Operations (child of projectgroup + categories)
-$conn->query("CREATE TABLE IF NOT EXISTS operations (
-    id INT(11) UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-    invoice_id VARCHAR(20) NOT NULL UNIQUE,
-    contract_number VARCHAR(50) NOT NULL,
-    project_group_id INT(11) UNSIGNED NOT NULL,
-    category_id INT(11) UNSIGNED NOT NULL,
-    duration_type ENUM('Non Recurring', 'Recurring - Monthly', 'Recurring - Quarterly', 'Recurring - Semi Annually', 'Recurring - Annually') DEFAULT 'Non Recurring',
-    start_date DATE NOT NULL,
-    end_date DATE NOT NULL,
-    status ENUM('Active', 'Completed', 'Inactive') DEFAULT 'Active',
-    invoice_data JSON NULL,
-    assigned_staff JSON DEFAULT NULL,
-    created_by VARCHAR(255) NOT NULL,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    INDEX idx_invoice_id (invoice_id),
-    INDEX idx_contract (contract_number),
-    INDEX idx_status (status),
-    INDEX idx_dates (start_date, end_date),
-    FOREIGN KEY (project_group_id) REFERENCES projectgroup(id) ON DELETE RESTRICT,
-    FOREIGN KEY (category_id) REFERENCES categories(id) ON DELETE RESTRICT
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci AUTO_INCREMENT=1");
-
-/**
- * Ensure default department (ID=1) exists
- * Changed from "User" to "Administrator" to match the protected department in departments.php
- */
-$result = $conn->query("SELECT id FROM departments WHERE name = 'Administrator'");
-if ($result->num_rows == 0) {
-    $stmt = $conn->prepare("INSERT INTO departments (name, description, status) VALUES (?, ?, ?)");
-    $stmt->bind_param("sss", $name, $desc, $status);
-    $name = 'Administrator';
-    $desc = 'Default system department for administrator roles';
-    $status = 'Active';
-    $stmt->execute();
-    $stmt->close();
-    
-    // Ensure ID = 1
-    $conn->query("UPDATE departments SET id = 1 WHERE name = 'Administrator'");
-    $conn->query("ALTER TABLE departments AUTO_INCREMENT = 2");
-}
-
-/**
- * Ensure default role (ID=1) exists
- * CHANGED: Default role name from "User" to "Super Admin"
- */
-$result = $conn->query("SELECT id FROM roles WHERE name = 'Super Admin' AND department_id = 1");
-if ($result->num_rows == 0) {
-    $stmt = $conn->prepare("INSERT INTO roles (name, department_id, status, description) VALUES (?, ?, ?, ?)");
-    $stmt->bind_param("siss", $name, $dept_id, $status, $desc);
-    $name = 'Super Admin';
-    $dept_id = 1;
-    $status = 'Active';
-    $desc = 'Default system role with full administrative privileges';
-    $stmt->execute();
-    $stmt->close();
-    
-    // Ensure ID = 1
-    $conn->query("UPDATE roles SET id = 1 WHERE name = 'Super Admin' AND department_id = 1");
-    $conn->query("ALTER TABLE roles AUTO_INCREMENT = 2");
-}
-
-/**
- * Ensure default admin account exists.
- * The initial email/password come ENTIRELY from environment variables
- * (ADMIN_DEFAULT_EMAIL / ADMIN_DEFAULT_PASSWORD) — nothing is hard-coded.
- * If no admin email is configured, seeding is skipped. If an email is set but
- * no password, a strong random one is generated and written to the error log
- * so the operator can retrieve it once.
- */
-$adminEmail = getenv('ADMIN_DEFAULT_EMAIL') ?: '';
-
-if ($adminEmail !== '') {
-    $stmt = $conn->prepare("SELECT id FROM users WHERE email = ?");
-    $stmt->bind_param("s", $adminEmail);
-    $stmt->execute();
-    $adminExists = $stmt->get_result()->num_rows > 0;
-    $stmt->close();
-
-    if (!$adminExists) {
-        $adminPlainPassword = getenv('ADMIN_DEFAULT_PASSWORD');
-        if ($adminPlainPassword === false || $adminPlainPassword === '') {
-            $adminPlainPassword = bin2hex(random_bytes(9)); // 18-char random password
-            error_log("config.php: created initial admin '{$adminEmail}' with generated password: {$adminPlainPassword}");
-        }
-
-        $name            = 'System Administrator';
-        $dept_id         = 1;
-        $role_id         = 1;
-        $status          = 'Active';
-        $hashed_password = password_hash($adminPlainPassword, PASSWORD_DEFAULT);
-
-        $stmt = $conn->prepare("INSERT INTO users (name, email, password, department_id, role_id, status) VALUES (?, ?, ?, ?, ?, ?)");
-        $stmt->bind_param("sssiis", $name, $adminEmail, $hashed_password, $dept_id, $role_id, $status);
-        $stmt->execute();
-        $stmt->close();
-
-        // Ensure ID = 1
-        $stmt = $conn->prepare("UPDATE users SET id = 1 WHERE email = ?");
-        $stmt->bind_param("s", $adminEmail);
-        $stmt->execute();
-        $stmt->close();
-        $conn->query("ALTER TABLE users AUTO_INCREMENT = 2");
-    }
-}
+ensure_tenant_schema($conn);
 
 /**
  * PERMISSION: Helper Functions for Role-Based Access Control
+ *
+ * NOTE ON SCOPE: role_id = 1 is the Super Admin *of this one company*. It grants
+ * nothing at the platform level — SHEHITA's own staff authenticate separately
+ * against platform_admins in the control database (see admin/).
  */
 
 /**
  * Check if user has permission for a specific action on a module
  * SUPER ADMIN (role_id = 1) automatically has all permissions
- * 
+ *
  * @param mysqli $conn Database connection
  * @param int $role_id User's role ID
  * @param string $module_name Module identifier (matches page parameter)
@@ -385,43 +96,111 @@ function hasPermission($conn, $role_id, $module_name, $action) {
     if ($role_id == 1) {
         return true;
     }
-    
-    // Check session first for performance
-    if (isset($_SESSION['permissions'][$module_name][$action])) {
-        return $_SESSION['permissions'][$module_name][$action] == 1;
+
+    // Only these four actions exist. $action is interpolated into the column name
+    // below, so anything else must never reach the query.
+    if (!in_array($action, ['view', 'add', 'edit', 'delete'], true)) {
+        return false;
     }
-    
-    // Fallback to database query
-    $stmt = $conn->prepare("SELECT can_$action FROM permissions WHERE role_id = ? AND module_name = ?");
-    $stmt->bind_param("is", $role_id, $module_name);
+
+    // Serve from the session cache, but only while it matches the version
+    // recorded in the database.
+    //
+    // The cache used to be dead code: loadUserPermissions() writes keys as
+    // 'can_view'/'can_add'/..., while this looked up 'view'/'add'/... So every
+    // check missed and fell through to a query -- roughly nineteen of them per
+    // page load, because the navigation menu tests each module.
+    //
+    // Simply correcting the key would have been worse than leaving it broken:
+    // the cache is only written at login, so an administrator changing a role's
+    // permissions would have had no effect until every affected user signed out.
+    // The version check is what makes caching safe -- permissions_bump_version()
+    // is called on every write in modules/permissions.php, which invalidates
+    // every user's cache on their next request.
+    $version = permissions_current_version($conn);
+
+    if (isset($_SESSION['permissions_version'], $_SESSION['permissions'])
+        && $_SESSION['permissions_version'] === $version
+    ) {
+        return !empty($_SESSION['permissions'][$module_name]["can_$action"]);
+    }
+
+    // Cache missing or stale: rebuild it once, then answer from it.
+    loadUserPermissions($conn, $role_id);
+
+    return !empty($_SESSION['permissions'][$module_name]["can_$action"]);
+}
+
+/**
+ * The current permissions version for this company.
+ *
+ * Read once per request. Any change to the permissions table bumps it, which is
+ * how a stale session cache is detected without the app having to reach into
+ * other users' sessions.
+ */
+function permissions_current_version($conn, $forceReload = false) {
+    static $version = null;
+    if ($version !== null && !$forceReload) {
+        return $version;
+    }
+
+    // @ because schema_meta legitimately does not exist on a database that has
+    // not been through lib/schema.php yet.
+    $result = @$conn->query("SELECT meta_value FROM schema_meta WHERE meta_key = 'permissions_version'");
+    if ($result && $result->num_rows > 0) {
+        return $version = (string)$result->fetch_assoc()['meta_value'];
+    }
+
+    return $version = '0';
+}
+
+/**
+ * Invalidate every user's cached permissions for this company.
+ * Call after ANY write to the permissions table.
+ */
+function permissions_bump_version($conn) {
+    $conn->query("CREATE TABLE IF NOT EXISTS schema_meta (
+        meta_key VARCHAR(32) NOT NULL PRIMARY KEY,
+        meta_value VARCHAR(64) NOT NULL,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+
+    $new = uniqid('', true);
+    $stmt = $conn->prepare(
+        "REPLACE INTO schema_meta (meta_key, meta_value) VALUES ('permissions_version', ?)"
+    );
+    $stmt->bind_param("s", $new);
     $stmt->execute();
-    $result = $stmt->get_result();
-    $has_permission = ($result->num_rows > 0) ? (bool)$result->fetch_assoc()["can_$action"] : false;
     $stmt->close();
-    return $has_permission;
+
+    // Drop this request's cached copies so the change is visible immediately to
+    // the administrator who just made it -- including the per-request static,
+    // which would otherwise still hold the pre-bump value and cause the session
+    // cache to be stamped with a version that is already stale.
+    permissions_current_version($conn, true);
+    unset($_SESSION['permissions'], $_SESSION['permissions_version']);
 }
 
 /**
  * Load all permissions for a role into session
  * This should be called immediately after successful login
- * 
+ *
  * @param mysqli $conn Database connection
  * @param int $role_id User's role ID
  */
 function loadUserPermissions($conn, $role_id) {
     $permissions = [];
-    
+
     // SUPER ADMIN: Load all possible modules with full permissions
     if ($role_id == 1) {
         // Define all system modules
         $all_modules = [
             'home', 'overview', 'projects', 'operations', 'status',
-            'projectlist', 'categories', 'projectgroup',
-            'expensescategory', 'expensesgroup',
-            'customer-management', 'company-settings', 'user-management', 
+            'categories', 'projectgroup',
+            'customer-management', 'company-settings', 'user-management',
             'departments', 'permissions', 'roles', 'profile','invoice','systemsettings'
         ];
-        
+
         // Grant full permissions for all modules to Super Admin
         foreach ($all_modules as $module) {
             $permissions[$module] = [
@@ -437,7 +216,7 @@ function loadUserPermissions($conn, $role_id) {
         $stmt->bind_param("i", $role_id);
         $stmt->execute();
         $result = $stmt->get_result();
-        
+
         while ($row = $result->fetch_assoc()) {
             $permissions[$row['module_name']] = [
                 'can_view' => (int)$row['can_view'],
@@ -448,8 +227,9 @@ function loadUserPermissions($conn, $role_id) {
         }
         $stmt->close();
     }
-    
+
     $_SESSION['permissions'] = $permissions;
+    $_SESSION['permissions_version'] = permissions_current_version($conn);
 }
 
 /**
@@ -487,16 +267,28 @@ function sanitize($conn, $data) {
     return htmlspecialchars(trim($data));
 }
 
+/**
+ * Display name for a role.
+ *
+ * A missing or unknown role reads as "No role assigned", NOT as "Super Admin".
+ * The old fallback claimed the highest privilege in the system for precisely the
+ * users who have none, so a role-less account showed "Super Admin" on its own
+ * profile and in the user list — exactly the wrong thing to tell an
+ * administrator auditing who can do what. Permissions were never actually
+ * granted by this function, but the label made the real state invisible.
+ */
 function getUserRoleName($conn, $role_id) {
-    if (!$role_id) return 'Super Admin';
+    if (!$role_id) return 'No role assigned';
+    $role_id = (int)$role_id;
     $result = $conn->query("SELECT name FROM roles WHERE id = $role_id");
-    return ($result && $result->num_rows > 0) ? $result->fetch_assoc()['name'] : 'Super Admin';
+    return ($result && $result->num_rows > 0) ? $result->fetch_assoc()['name'] : 'No role assigned';
 }
 
 function getDepartmentName($conn, $dept_id) {
-    if (!$dept_id) return 'Administrator';
+    if (!$dept_id) return 'No department';
+    $dept_id = (int)$dept_id;
     $result = $conn->query("SELECT name FROM departments WHERE id = $dept_id");
-    return ($result && $result->num_rows > 0) ? $result->fetch_assoc()['name'] : 'Administrator';
+    return ($result && $result->num_rows > 0) ? $result->fetch_assoc()['name'] : 'No department';
 }
 
 // Return connection

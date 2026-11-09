@@ -10,14 +10,24 @@
  * - Professional branding consistent with SHEHITA identity
  */
 
-session_start();
+// Multi-tenant bootstrap: resolves which company this URL belongs to, opens a
+// session scoped to that company, and defines TENANT_DB for config.php.
+// This REPLACES session_start() -- the session must be scoped before it starts.
+require_once __DIR__ . '/bootstrap.php';
+
+// This company's logo and display name (lib/theme.php). Resolved here, above
+// the document, because <title> below needs $product_name.
+$logo_path    = tenant_logo_url();
+$logo_exists  = $logo_path !== '';
+$company_name = tenant_display_name();
+$product_name = tenant_product_name();
 ?>
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>SHEHITA EMS - About Us | Enterprise Management Solutions</title>
+    <title><?= htmlspecialchars($product_name) ?> - About Us</title>
     <link rel="icon" href="uploads/systemlogo/shehita-logo.jpg">
     <meta name="description" content="SHEHITA Enterprise Management System - Comprehensive business management solution for modern enterprises.">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
@@ -280,7 +290,7 @@ session_start();
 
         .features-grid {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            grid-template-columns: repeat(auto-fit, minmax(min(300px, 100%), 1fr));
             gap: 30px;
         }
 
@@ -563,43 +573,20 @@ session_start();
             }
         }
     </style>
+    <?php echo tenant_theme_css(); ?>
 </head>
 <body>
     <div class="container">
         <div class="about-card">
             <!-- Hero Header -->
             <div class="about-header">
-                <?php
-                // Check for logo in various locations (matching login.php logic)
-                $logo_path = '';
-                $possible_logo_paths = [
-                    'uploads/systemlogo/shehita-logo.jpg',
-                    'uploads/systemlogo/Shehita_Logo.jpg',
-                    'uploads/systemlogo/Shehita_Logo.jpeg',
-                    'uploads/systemlogo/logo.png',
-                    'uploads/systemlogo/logo.jpg',
-                    '../uploads/systemlogo/shehita-logo.jpg',
-                    '../uploads/systemlogo/Shehita_Logo.jpg',
-                    '../uploads/systemlogo/logo.png',
-                    '../uploads/systemlogo/logo.jpg'
-                ];
-                
-                foreach ($possible_logo_paths as $path) {
-                    if (file_exists($path)) {
-                        $logo_path = $path;
-                        break;
-                    }
-                }
-                
-                $logo_exists = !empty($logo_path);
-                ?>
-                
+
                 <!-- Logo Container with White Background (matching login.php) -->
                 <div class="logo-container">
                     <?php if ($logo_exists): ?>
-                        <img src="<?= htmlspecialchars($logo_path) ?>" alt="SHEHITA" class="header-logo">
+                        <img src="<?= htmlspecialchars($logo_path) ?>" alt="<?= htmlspecialchars($company_name) ?>" class="header-logo">
                     <?php else: ?>
-                        <div class="logo-text">SHEHITA</div>
+                        <div class="logo-text"><?= htmlspecialchars($company_name) ?></div>
                         <span class="logo-sub">Enterprise Management System</span>
                     <?php endif; ?>
                 </div>
@@ -649,12 +636,6 @@ session_start();
                             <div class="feature-icon"><i class="fas fa-chart-line"></i></div>
                             <h3>Project Management</h3>
                             <p>Easily manage projects, categories, and groups with our intuitive project management tools. Track progress, assign tasks, and monitor deadlines in real-time.</p>
-                        </div>
-
-                        <div class="feature-card">
-                            <div class="feature-icon"><i class="fas fa-money-bill-wave"></i></div>
-                            <h3>Expense Tracking</h3>
-                            <p>Track and manage expenses efficiently with categorized expense groups and categories. Generate detailed reports for better financial insights.</p>
                         </div>
 
                         <div class="feature-card">

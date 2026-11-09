@@ -401,7 +401,7 @@ document.addEventListener('DOMContentLoaded', function() {
     
     /* Welcome Hero Section */
     .home-welcome-section {
-        background: linear-gradient(135deg, #8b5a2b 0%, #5d3e1e 100%);
+        background: linear-gradient(135deg, var(--brown-700) 0%, var(--brown-800) 100%);
         border-radius: 24px;
         padding: 32px 40px;
         margin-bottom: 32px;
@@ -502,8 +502,15 @@ document.addEventListener('DOMContentLoaded', function() {
         box-shadow: 0 6px 16px rgba(0, 0, 0, 0.1);
     }
     
+    /*
+     * max-width MUST be relative to the card, not an absolute pixel figure.
+     * This was 320px inside a container capped at 240px -- 200px of content box
+     * once padding is taken off -- so any logo wider than that rendered straight
+     * out over the maroon banner behind it. Companies upload whatever logo they
+     * have, and wide banner marks are common.
+     */
     .home-welcome-logo img {
-        max-width: 320px;
+        max-width: 100%;
         max-height: 120px;
         width: auto;
         height: auto;
@@ -533,7 +540,7 @@ document.addEventListener('DOMContentLoaded', function() {
     /* Stats Grid */
     .home-stats-grid {
         display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+        grid-template-columns: repeat(auto-fit, minmax(min(240px, 100%), 1fr));
         gap: 24px;
         margin-bottom: 32px;
     }
@@ -564,7 +571,7 @@ document.addEventListener('DOMContentLoaded', function() {
     }
     
     .home-stat-card-primary::before {
-        background: #8b5a2b;
+        background: var(--brown-700);
     }
     
     .home-stat-card-success::before {
@@ -627,7 +634,7 @@ document.addEventListener('DOMContentLoaded', function() {
     
     .home-stat-icon-primary {
         background: rgba(139, 90, 43, 0.1);
-        color: #8b5a2b;
+        color: var(--brown-700);
     }
     
     .home-stat-icon-success {
@@ -665,7 +672,7 @@ document.addEventListener('DOMContentLoaded', function() {
     }
     
     .home-stat-link {
-        color: #8b5a2b;
+        color: var(--brown-700);
         text-decoration: none;
         font-size: 13px;
         font-weight: 500;
@@ -677,7 +684,7 @@ document.addEventListener('DOMContentLoaded', function() {
     
     .home-stat-link:hover {
         gap: 10px;
-        color: #5d3e1e;
+        color: var(--brown-800);
     }
     
     /* Status Badge */
@@ -733,7 +740,7 @@ document.addEventListener('DOMContentLoaded', function() {
     
     .home-company-header i {
         font-size: 24px;
-        color: #8b5a2b;
+        color: var(--brown-700);
     }
     
     .home-company-header h3 {
@@ -787,7 +794,7 @@ document.addEventListener('DOMContentLoaded', function() {
         width: 48px;
         height: 48px;
         border-radius: 50%;
-        background: #8b5a2b;
+        background: var(--brown-700);
         color: white;
         border: none;
         cursor: pointer;
@@ -800,7 +807,7 @@ document.addEventListener('DOMContentLoaded', function() {
     }
     
     .home-refresh-btn:hover {
-        background: #5d3e1e;
+        background: var(--brown-800);
         transform: scale(1.05);
     }
     
@@ -867,7 +874,7 @@ document.addEventListener('DOMContentLoaded', function() {
         width: 20px;
         height: 20px;
         border: 2px solid var(--gray-300);
-        border-top-color: #8b5a2b;
+        border-top-color: var(--brown-700);
         border-radius: 50%;
         animation: home-spin 0.8s linear infinite;
     }
@@ -1231,7 +1238,10 @@ document.addEventListener('DOMContentLoaded', function() {
             const logoContainer = document.querySelector('.home-welcome-logo');
             
             if (data.logo_url && logoContainer) {
-                logoContainer.innerHTML = `<img src="${home_escapeHtml(data.logo_url)}" alt="Company Logo" id="home_companyLogo" style="max-width: 180px; max-height: 70px; width: auto; height: auto; object-fit: contain; display: block; margin: 0 auto;">`;
+                // No inline sizing: .home-welcome-logo img owns it. This used to
+                // carry its own max-width, so a refreshed logo rendered at a
+                // different size than the same logo on a fresh page load.
+                logoContainer.innerHTML = `<img src="${home_escapeHtml(data.logo_url)}" alt="Company Logo" id="home_companyLogo">`;
             } else if (logoContainer) {
                 logoContainer.innerHTML = `<div class="home-welcome-logo-placeholder">
                     <i class="fas fa-building"></i>

@@ -1061,7 +1061,7 @@ window.updateOperationsLanguage = updateOperationsLanguage;
     /* KPI Cards Row */
     .operations-kpi-row {
         display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+        grid-template-columns: repeat(auto-fit, minmax(min(200px, 100%), 1fr));
         gap: 20px;
         margin-bottom: 32px;
     }
@@ -1243,7 +1243,7 @@ window.updateOperationsLanguage = updateOperationsLanguage;
 
     .operations-form-grid {
         display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+        grid-template-columns: repeat(auto-fit, minmax(min(300px, 100%), 1fr));
         gap: 20px;
         margin-bottom: 24px;
     }
@@ -1311,7 +1311,7 @@ window.updateOperationsLanguage = updateOperationsLanguage;
 
     .operations-contract-details-grid {
         display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+        grid-template-columns: repeat(auto-fit, minmax(min(200px, 100%), 1fr));
         gap: 12px;
     }
 
@@ -1454,7 +1454,7 @@ window.updateOperationsLanguage = updateOperationsLanguage;
 
     .operations-financial-grid {
         display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+        grid-template-columns: repeat(auto-fit, minmax(min(200px, 100%), 1fr));
         gap: 16px;
     }
 
@@ -3439,7 +3439,7 @@ window.updateOperationsLanguage = updateOperationsLanguage;
                     .operations-modal-invoice-header {
                         text-align: center;
                         padding: 15px 20px;
-                        border-bottom: 2px solid #3e2b1f;
+                        border-bottom: 2px solid ${window.brandColor(900)};
                         margin-bottom: 15px;
                     }
                     
@@ -3452,7 +3452,7 @@ window.updateOperationsLanguage = updateOperationsLanguage;
                     .operations-modal-invoice-company-name {
                         font-size: 20px;
                         font-weight: 700;
-                        color: #3e2b1f;
+                        color: ${window.brandColor(900)};
                         margin-bottom: 4px;
                     }
                     
@@ -3466,7 +3466,7 @@ window.updateOperationsLanguage = updateOperationsLanguage;
                         text-align: center;
                         font-size: 16px;
                         font-weight: 700;
-                        color: #3e2b1f;
+                        color: ${window.brandColor(900)};
                         margin: 15px 0;
                         padding: 8px;
                         background: #f0e9e2;
@@ -3484,7 +3484,7 @@ window.updateOperationsLanguage = updateOperationsLanguage;
                         background: #f1f5f9;
                         padding: 8px 12px;
                         font-weight: 700;
-                        color: #3e2b1f;
+                        color: ${window.brandColor(900)};
                         border-bottom: 1px solid #e2e8f0;
                         font-size: 12px;
                     }

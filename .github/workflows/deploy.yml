@@ -1,11 +1,14 @@
 name: Deploy to Contabo
 
-# Runs ONLY when you trigger it by hand from the GitHub "Actions" tab
-# (Deploy to Contabo -> Run workflow). This avoids failed runs before the
-# server and secrets are ready.
+# Manual-only until the server and secrets are ready.
 #
-# To enable fully automatic deploys later (push to main -> deploy), set the
-# repository secrets (see DEPLOY.md), then uncomment the "push:" block below.
+# Deliberately still manual: the multi-tenant rebuild changes the database
+# layout (one database per client company) and adds required environment
+# variables. Turning on push-to-deploy before .env on the VPS has the new
+# values would deploy an app that cannot start.
+#
+# To enable automatic deploys once the server is set up per DEPLOY.md:
+# uncomment the "push:" block below.
 on:
   workflow_dispatch:
   # push:

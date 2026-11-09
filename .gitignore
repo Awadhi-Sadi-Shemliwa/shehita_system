@@ -5,12 +5,20 @@
 !.env.example
 
 # ---- Runtime-uploaded files ----
-# Track only the committed system logo; ignore everything users upload at runtime.
+# Track only the committed system logo and the upload guard; ignore everything
+# users upload at runtime, including every client company's logo.
 /uploads/*
+!/uploads/.htaccess
 !/uploads/systemlogo/
 /uploads/systemlogo/*
 !/uploads/systemlogo/shehita-logo.jpg
 !/uploads/systemlogo/Shehita_Logo.png
+
+# Client company logos, created by signup.php.
+/uploads/tenants/
+
+# ---- Composer ----
+/vendor/
 
 # ---- Logs ----
 *.log
@@ -21,3 +29,12 @@ Thumbs.db
 .idea/
 .vscode/
 *.swp
+
+# ---- Local working notes ----
+# Session notes and planning documents. Kept on this machine only -- they record
+# credentials, internal decisions and half-finished thinking that does not belong
+# in a shared repository.
+feature.md
+guide.md
+runbook.md
+progress.md

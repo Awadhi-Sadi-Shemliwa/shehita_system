@@ -708,7 +708,7 @@ document.addEventListener('DOMContentLoaded', function() {
     /* KPI Cards Row */
     .overview-kpi-row {
         display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+        grid-template-columns: repeat(auto-fit, minmax(min(200px, 100%), 1fr));
         gap: 20px;
         margin-bottom: 32px;
     }
@@ -805,7 +805,7 @@ document.addEventListener('DOMContentLoaded', function() {
     /* Charts Row */
     .overview-charts-row {
         display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+        grid-template-columns: repeat(auto-fit, minmax(min(400px, 100%), 1fr));
         gap: 24px;
         margin-bottom: 32px;
     }
@@ -816,6 +816,14 @@ document.addEventListener('DOMContentLoaded', function() {
         padding: 20px;
         box-shadow: var(--shadow-md);
         border: 1px solid var(--gray-200);
+        /*
+         * A grid item defaults to min-width:auto, which refuses to shrink below
+         * its content. Chart.js falls back to a 300px canvas, so with 40px of
+         * padding this card insisted on 340px and burst out of a 295px column
+         * on a 360px phone. min-width:0 lets it track the column, and the chart
+         * then sizes itself to fit.
+         */
+        min-width: 0;
     }
 
     .overview-chart-title {
@@ -835,6 +843,13 @@ document.addEventListener('DOMContentLoaded', function() {
         position: relative;
         height: 300px;
         width: 100%;
+        min-width: 0;
+    }
+
+    /* Belt and braces: whatever width Chart.js writes onto the canvas, it may
+       not be wider than the card holding it. */
+    .overview-chart-container canvas {
+        max-width: 100%;
     }
 
     /* Filter Bar */

@@ -344,6 +344,23 @@ if (isset($_POST['roles_update']) && !canEdit($conn, $user_role_id, $module_name
     }
 }
 
+/**
+ * How many users still hold this role.
+ *
+ * Used to block deletion of an occupied role. See the delete handler below for
+ * why this matters.
+ */
+function roles_count_members(mysqli $conn, int $roleId): int
+{
+    $stmt = $conn->prepare("SELECT COUNT(*) AS c FROM users WHERE role_id = ?");
+    $stmt->bind_param("i", $roleId);
+    $stmt->execute();
+    $count = (int)$stmt->get_result()->fetch_assoc()['c'];
+    $stmt->close();
+
+    return $count;
+}
+
 // PERMISSION: Check delete permission before processing delete operation
 if (isset($_GET['roles_delete']) && !canDelete($conn, $user_role_id, $module_name)) {
     $roles_message = "You do not have permission to delete roles.";
@@ -354,6 +371,19 @@ if (isset($_GET['roles_delete']) && !canDelete($conn, $user_role_id, $module_nam
     // PROTECTION CHECK: Cannot delete default role (ID = 1)
     if ($id == 1) {
         $roles_message = "The default Super Admin role cannot be deleted";
+        $roles_message_type = "danger";
+    } elseif ($id > 0 && ($roles_members = roles_count_members($conn, $id)) > 0) {
+        // SECURITY: refuse to delete a role that still has members.
+        //
+        // users.role_id is ON DELETE SET NULL, so deleting an occupied role
+        // silently stripped its members' role instead of blocking. Combined with
+        // an auto-assign in user-management.php, that used to escalate every
+        // affected user to Super Admin. That auto-assign is gone, but a role
+        // deletion that quietly leaves staff unable to use anything is still the
+        // wrong outcome — reassigning them first is the only safe order.
+        $roles_message = "This role cannot be deleted because {$roles_members} "
+            . ($roles_members === 1 ? "user is" : "users are")
+            . " still assigned to it. Move them to another role first, then delete it.";
         $roles_message_type = "danger";
     } elseif ($id > 0) {
         $delete_stmt = $conn->prepare("DELETE FROM roles WHERE id = ?");
@@ -736,7 +766,7 @@ window.updateRolesLanguage = updateRolesLanguage;
 
     .roles-form-grid {
         display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+        grid-template-columns: repeat(auto-fit, minmax(min(250px, 100%), 1fr));
         gap: 16px;
         margin-bottom: 20px;
     }

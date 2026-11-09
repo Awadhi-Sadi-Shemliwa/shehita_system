@@ -11,7 +11,10 @@
  * REFINED: Added unique homepage_translations prefix for language switching (Issue fix)
  */
 
-session_start();
+// Multi-tenant bootstrap: resolves which company this URL belongs to, opens a
+// session scoped to that company, and defines TENANT_DB for config.php.
+// This REPLACES session_start() -- the session must be scoped before it starts.
+require_once __DIR__ . '/bootstrap.php';
 
 // ============================================================
 // SESSION TIMEOUT CHECK - Server-side validation
@@ -43,6 +46,26 @@ if (!isset($_SESSION['email'])) {
     exit();
 }
 
+// ============================================================
+// SUBSCRIPTION GATE
+// ============================================================
+// This file is the ONLY shell for all 17 modules -- every authenticated page is
+// homepage.php?page=<module> -- so one check here covers the whole application,
+// including someone typing ?page=invoice directly.
+//
+// $SUBSCRIPTION comes from bootstrap.php via subscription_resolve(), the same
+// pure function that renders the "trial ends in N days" banner below. Because
+// the banner and this gate read one resolver, they cannot disagree.
+//
+// Everyone can still LOG IN when expired; it is this redirect that decides what
+// they see. The company's own admin (role_id = 1) is sent to the billing page so
+// they can see what to pay and record it; everyone else gets a notice page.
+if (!$SUBSCRIPTION['is_active']) {
+    $is_company_admin = (int)($_SESSION['role_id'] ?? 0) === 1;
+    header('Location: ' . ($is_company_admin ? 'billing.php' : 'expired.php'));
+    exit();
+}
+
 // Include database configuration
 $conn = require_once 'config.php';
 
@@ -56,8 +79,7 @@ $can_view_current_page = canView($conn, $user_role_id, $current_page);
 // Define all valid modules
 $valid_modules = [
     'home', 'overview', 'projects', 'operations', 'status',
-    'projectlist', 'categories', 'projectgroup',
-    'expensescategory', 'expensesgroup',
+    'categories', 'projectgroup',
     'customer-management', 'company-settings', 'user-management', 'departments', 'permissions',
     'roles', 'profile', 'invoice', 'systemsettings'
 ];
@@ -78,6 +100,31 @@ function canShowMenuItem($conn, $role_id, $module_name) {
     
     // Check if user has view permission for this module
     return canView($conn, $role_id, $module_name);
+}
+
+/**
+ * Should this navigation entry be shown?
+ *
+ * Most entries are modules and are governed by the permissions table. An entry
+ * marked 'admin_only' is NOT a module -- Billing is billing.php, a top-level
+ * page with no row in that table -- so it is gated on role 1 instead, the same
+ * test billing.php itself applies. They have to agree: a link shown to someone
+ * the page will bounce is worse than no link at all.
+ */
+function canShowNavItem($conn, $role_id, array $item) {
+    if (!empty($item['admin_only'])) {
+        return (int)$role_id === 1;
+    }
+
+    return canShowMenuItem($conn, $role_id, $item['page']);
+}
+
+/**
+ * Where a navigation entry points. Modules live under homepage.php?page=X;
+ * an entry carrying its own 'href' is a page in its own right.
+ */
+function navItemHref(array $item) {
+    return $item['href'] ?? ('?page=' . $item['page']);
 }
 
 // Get role name and department name for display if not already set in session
@@ -107,37 +154,18 @@ if ($user_id > 0) {
 $display_role = isset($_SESSION['role_name']) ? $_SESSION['role_name'] : (isset($_SESSION['role_id']) ? 'User' : 'User');
 $display_department = isset($_SESSION['department_name']) ? $_SESSION['department_name'] : (isset($_SESSION['department_id']) ? 'General' : 'General');
 
-// Determine logo path - dynamic based on current directory
-$logo_path = '';
-$possible_logo_paths = [
-    'uploads/systemlogo/shehita-logo.jpg',
-    'uploads/systemlogo/Shehita_Logo.jpg',
-    'uploads/systemlogo/Shehita_Logo.jpeg',
-    'uploads/systemlogo/logo.png',
-    'uploads/systemlogo/logo.jpg'
-];
-
-foreach ($possible_logo_paths as $path) {
-    if (file_exists($path)) {
-        $logo_path = $path;
-        break;
-    }
-    // Also check with ../ prefix
-    if (file_exists('../' . $path)) {
-        $logo_path = '../' . $path;
-        break;
-    }
-}
-
-// If no logo found, use default text fallback
-$logo_exists = !empty($logo_path);
+// This company's logo and display name (lib/theme.php).
+$logo_path    = tenant_logo_url();
+$logo_exists  = $logo_path !== '';
+$company_name = tenant_display_name();
+$product_name = tenant_product_name();
 ?>
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>SHEHITA EMS | <?= ucfirst(str_replace('-', ' ', $current_page)) ?></title>
+    <title><?= htmlspecialchars($product_name) ?> | <?= ucfirst(str_replace('-', ' ', $current_page)) ?></title>
     <?php if ($logo_exists): ?>
     <link rel="icon" href="<?= htmlspecialchars($logo_path) ?>">
     <?php endif; ?>
@@ -226,6 +254,11 @@ $logo_exists = !empty($logo_path);
             justify-content: space-between;
             align-items: center;
             gap: 16px;
+            /* Without min-width:0 a flex child refuses to shrink below its
+               content width, so an over-long menu overflows the bar instead of
+               compressing. This is what let "Settings" and the user dropdown
+               run off the right-hand edge at 100% zoom. */
+            min-width: 0;
         }
 
         /* Logo Area */
@@ -260,6 +293,13 @@ $logo_exists = !empty($logo_path);
 
         .navbar-logo-img {
             max-height: 45px;
+            /* A width cap matters as much as the height one. Companies upload
+               whatever logo they have, and a wide banner mark (the City St
+               George's logo is roughly 4:1) rendered at 45px tall is ~380px
+               wide -- which is most of the space the menu needed. Capping the
+               width letterboxes those logos instead of letting them push the
+               navigation off-screen. */
+            max-width: 200px;
             width: auto;
             object-fit: contain;
             display: block;
@@ -269,7 +309,7 @@ $logo_exists = !empty($logo_path);
             font-family: 'Montserrat', sans-serif;
             font-size: 20px;
             font-weight: 800;
-            background: linear-gradient(135deg, #d4bfa8 0%, #b89b7e 100%);
+            background: linear-gradient(135deg, var(--brown-400) 0%, var(--brown-500) 100%);
             -webkit-background-clip: text;
             -webkit-text-fill-color: transparent;
             background-clip: text;
@@ -294,6 +334,10 @@ $logo_exists = !empty($logo_path);
             padding: 0;
             flex-wrap: nowrap;
             overflow-x: visible;
+            /* Shrinkable, so the bar adapts rather than overflowing. The
+               breakpoint tiers below take over before it compresses far enough
+               to look cramped. */
+            min-width: 0;
         }
 
         .nav-item {
@@ -540,7 +584,7 @@ $logo_exists = !empty($logo_path);
             left: -280px;
             width: 280px;
             height: calc(100% - var(--navbar-height));
-            background: linear-gradient(180deg, #2a1f18 0%, #1e1610 100%);
+            background: var(--navbar-bg);
             z-index: 1000;
             overflow-y: auto;
             transition: left 0.3s cubic-bezier(0.4, 0, 0.2, 1);
@@ -631,6 +675,30 @@ $logo_exists = !empty($logo_path);
         }
 
         /* Main Content Area */
+        /* Subscription countdown banner. Shown only inside the last week of a
+           trial or paid period, from the same subscription_resolve() state that
+           drives the lockout -- so it can never say "3 days left" while the
+           system is actually locking people out. */
+        .sub-banner {
+            display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+            padding: 11px 18px; border-radius: 10px; margin-bottom: 18px;
+            font-size: .92rem; line-height: 1.5;
+            background: var(--warning-bg); border-left: 3px solid var(--warning-border);
+            color: var(--warning-text);
+        }
+        .sub-banner.urgent { background: #fee2e2; border-left-color: #dc2626; color: #991b1b; }
+        .sub-banner .grow { flex: 1; }
+        .sub-banner a.act {
+            padding: 7px 15px; border-radius: 7px; background: var(--brown-700); color: #fff;
+            text-decoration: none; font-weight: 600; font-size: .87rem; white-space: nowrap;
+        }
+        .sub-banner a.act:hover { background: var(--brown-800); }
+        .sub-banner button.dismiss {
+            background: none; border: none; cursor: pointer; color: inherit;
+            font-size: 1.1rem; opacity: .6; padding: 0 4px;
+        }
+        .sub-banner button.dismiss:hover { opacity: 1; }
+
         .main-content {
             min-height: calc(100vh - var(--navbar-height));
             padding: 24px 32px;
@@ -861,19 +929,61 @@ $logo_exists = !empty($logo_path);
             }
         }
 
-        /* Responsive Styles */
-        @media (max-width: 1200px) {
-            .nav-link {
-                padding: 10px 12px;
-                font-size: 13px;
+        /* ------------------------------------------------------------------
+           Responsive tiers
+
+           Wide    >= 1400px   full navigation
+           Compact 1100-1399   tighter nav, smaller logo, avatar-only user chip
+           Tablet  768-1099    hamburger
+           Phone   480-767
+           Small   360-479     narrowest supported width
+
+           The compact tier exists because there is a wide gap between "the full
+           menu fits comfortably" and "show a hamburger". Previously the menu was
+           hidden only below 1024px, so every width above that had to fit nine
+           items on one line -- and on a normal laptop at 100% zoom, it did not.
+           ------------------------------------------------------------------ */
+
+        /* Compact: buy back horizontal space before giving up on the menu. */
+        @media (max-width: 1399px) {
+            .navbar-container {
+                padding: 0 16px;
+                gap: 10px;
             }
-            
+
+            .nav-menu {
+                gap: 2px;
+            }
+
+            .nav-link {
+                padding: 9px 10px;
+                font-size: 13px;
+                gap: 6px;
+            }
+
             .nav-link i {
                 font-size: 14px;
             }
+
+            .navbar-logo-img {
+                max-height: 40px;
+                max-width: 150px;
+            }
+
+            /* The name and role are the largest thing on the right and the
+               easiest to lose: the avatar still identifies who is signed in,
+               and the dropdown still lists everything. */
+            .user-info {
+                display: none;
+            }
+
+            .navbar-right {
+                gap: 10px;
+            }
         }
 
-        @media (max-width: 1024px) {
+        /* Tablet and below: the menu becomes the hamburger. */
+        @media (max-width: 1099px) {
             .nav-menu {
                 display: none;
             }
@@ -884,6 +994,12 @@ $logo_exists = !empty($logo_path);
             
             .navbar-container {
                 padding: 0 16px;
+            }
+
+            /* With the menu gone there is room for the logo again. */
+            .navbar-logo-img {
+                max-height: 42px;
+                max-width: 190px;
             }
         }
 
@@ -919,8 +1035,61 @@ $logo_exists = !empty($logo_path);
                 left: 20px;
                 max-width: calc(100% - 40px);
             }
+
+            .navbar-container {
+                padding: 0 12px;
+            }
+
+            .navbar-logo-img {
+                max-height: 36px;
+                max-width: 150px;
+            }
+        }
+
+        /* Small phones -- 360px is the narrowest width this app supports. */
+        @media (max-width: 479px) {
+            .navbar-container {
+                padding: 0 10px;
+                gap: 8px;
+            }
+
+            .navbar-logo-img {
+                max-height: 32px;
+                max-width: 120px;
+            }
+
+            .navbar-logo-wrapper {
+                padding: 2px 4px;
+            }
+
+            .main-content,
+            .module-wrapper {
+                padding: 12px;
+            }
+
+            .mobile-toggle {
+                width: 40px;
+                height: 40px;
+                font-size: 18px;
+            }
+
+            .user-avatar {
+                width: 34px;
+                height: 34px;
+            }
+        }
+
+        /* Backstop: no page may scroll sideways. A single over-wide element
+           anywhere would otherwise reintroduce the overflow this release fixes,
+           silently and on every page, since this file is the shell for all 16
+           modules. Wide data tables scroll inside their own containers, which
+           is unaffected by this. */
+        html, body {
+            max-width: 100%;
+            overflow-x: hidden;
         }
     </style>
+    <?php echo tenant_theme_css(); ?>
 </head>
 <body>
     <!-- Timeout Modal -->
@@ -961,11 +1130,11 @@ $logo_exists = !empty($logo_path);
             <a href="?page=home" class="navbar-logo">
                 <?php if ($logo_exists): ?>
                     <div class="navbar-logo-wrapper">
-                        <img src="<?= htmlspecialchars($logo_path) ?>" alt="SHEHITA EMS" class="navbar-logo-img">
+                        <img src="<?= htmlspecialchars($logo_path) ?>" alt="<?= htmlspecialchars($product_name) ?>" class="navbar-logo-img">
                     </div>
                 <?php else: ?>
                     <div>
-                        <div class="navbar-logo-text">SHEHITA EMS</div>
+                        <div class="navbar-logo-text"><?= htmlspecialchars($product_name) ?></div>
                         <div class="navbar-logo-sub">Enterprise Management System</div>
                     </div>
                 <?php endif; ?>
@@ -993,7 +1162,7 @@ $logo_exists = !empty($logo_path);
                 function renderDropdown($conn, $role_id, $items, $icon, $label, $current_page, $lang_key) {
                     $has_visible = false;
                     foreach ($items as $item) {
-                        if (canShowMenuItem($conn, $role_id, $item['page'])) {
+                        if (canShowNavItem($conn, $role_id, $item)) {
                             $has_visible = true;
                             break;
                         }
@@ -1017,10 +1186,10 @@ $logo_exists = !empty($logo_path);
                     echo '<ul class="dropdown-menu">';
                     
                     foreach ($items as $item) {
-                        if (canShowMenuItem($conn, $role_id, $item['page'])) {
+                        if (canShowNavItem($conn, $role_id, $item)) {
                             $active_class = ($current_page == $item['page']) ? 'active' : '';
                             echo '<li>';
-                            echo '<a href="?page=' . $item['page'] . '" class="dropdown-item ' . $active_class . '" data-homepage-lang="' . $item['lang_key'] . '">';
+                            echo '<a href="' . htmlspecialchars(navItemHref($item)) . '" class="dropdown-item ' . $active_class . '" data-homepage-lang="' . $item['lang_key'] . '">';
                             echo '<i class="' . $item['icon'] . '"></i>';
                             echo '<span>' . $item['label'] . '</span>';
                             echo '</a>';
@@ -1043,14 +1212,8 @@ $logo_exists = !empty($logo_path);
                 ];
                 
                 $projects_dropdown_items = [
-                    ['page' => 'projectlist', 'icon' => 'fas fa-list', 'label' => 'Project List', 'lang_key' => 'projectList'],
                     ['page' => 'categories', 'icon' => 'fas fa-tags', 'label' => 'Categories', 'lang_key' => 'categories'],
                     ['page' => 'projectgroup', 'icon' => 'fas fa-layer-group', 'label' => 'Groups', 'lang_key' => 'groups']
-                ];
-                
-                $expenses_dropdown_items = [
-                    ['page' => 'expensescategory', 'icon' => 'fas fa-folder', 'label' => 'Categories', 'lang_key' => 'expensesCategories'],
-                    ['page' => 'expensesgroup', 'icon' => 'fas fa-object-group', 'label' => 'Groups', 'lang_key' => 'expensesGroups']
                 ];
                 
                 $settings_dropdown_items = [
@@ -1060,7 +1223,11 @@ $logo_exists = !empty($logo_path);
                     ['page' => 'departments', 'icon' => 'fas fa-sitemap', 'label' => 'Departments', 'lang_key' => 'departments'],
                     ['page' => 'roles', 'icon' => 'fas fa-user-tag', 'label' => 'Roles', 'lang_key' => 'roles'],
                     ['page' => 'permissions', 'icon' => 'fas fa-shield-alt', 'label' => 'Permissions', 'lang_key' => 'permissions'],
-                    ['page' => 'systemsettings', 'icon' => 'fas fa-globe', 'label' => 'System Settings', 'lang_key' => 'systemSettings']
+                    ['page' => 'systemsettings', 'icon' => 'fas fa-globe', 'label' => 'System Settings', 'lang_key' => 'systemSettings'],
+                    // Not a module: billing.php is a page of its own, and only the
+                    // company's own administrator may open it.
+                    ['page' => 'billing', 'href' => 'billing.php', 'icon' => 'fas fa-credit-card',
+                     'label' => 'Subscription & Billing', 'lang_key' => 'billing', 'admin_only' => true]
                 ];
                 
                 $user_dropdown_items = [
@@ -1074,7 +1241,6 @@ $logo_exists = !empty($logo_path);
                 
                 // Render dropdown menus
                 renderDropdown($conn, $user_role_id, $projects_dropdown_items, 'fas fa-boxes', 'Projects', $current_page, 'projectsMenu');
-                renderDropdown($conn, $user_role_id, $expenses_dropdown_items, 'fas fa-money-bill-wave', 'Expenses', $current_page, 'expensesMenu');
                 renderDropdown($conn, $user_role_id, $settings_dropdown_items, 'fas fa-cog', 'Settings', $current_page, 'settings');
                 ?>
             </ul>
@@ -1166,7 +1332,7 @@ $logo_exists = !empty($logo_path);
         function renderMobileDropdown($conn, $role_id, $items, $icon, $label, $current_page, $lang_key, $dropdown_id) {
             $has_visible = false;
             foreach ($items as $item) {
-                if (canShowMenuItem($conn, $role_id, $item['page'])) {
+                if (canShowNavItem($conn, $role_id, $item)) {
                     $has_visible = true;
                     break;
                 }
@@ -1193,10 +1359,10 @@ $logo_exists = !empty($logo_path);
             echo '<ul class="mobile-dropdown-menu" id="mobileDropdown_' . $dropdown_id . '">';
             
             foreach ($items as $item) {
-                if (canShowMenuItem($conn, $role_id, $item['page'])) {
+                if (canShowNavItem($conn, $role_id, $item)) {
                     $active_class = ($current_page == $item['page']) ? 'active' : '';
                     echo '<li>';
-                    echo '<a href="?page=' . $item['page'] . '" class="mobile-dropdown-item ' . $active_class . '" data-homepage-lang="' . $item['lang_key'] . '">';
+                    echo '<a href="' . htmlspecialchars(navItemHref($item)) . '" class="mobile-dropdown-item ' . $active_class . '" data-homepage-lang="' . $item['lang_key'] . '">';
                     echo '<i class="' . $item['icon'] . '" style="margin-right: 8px;"></i>';
                     echo $item['label'];
                     echo '</a>';
@@ -1218,7 +1384,6 @@ $logo_exists = !empty($logo_path);
             
             // Render dropdowns for mobile
             renderMobileDropdown($conn, $user_role_id, $projects_dropdown_items, 'fas fa-boxes', 'Projects', $current_page, 'projectsMenu', 'projects');
-            renderMobileDropdown($conn, $user_role_id, $expenses_dropdown_items, 'fas fa-money-bill-wave', 'Expenses', $current_page, 'expensesMenu', 'expenses');
             renderMobileDropdown($conn, $user_role_id, $settings_dropdown_items, 'fas fa-cog', 'Settings', $current_page, 'settings', 'settings');
             
             // User dropdown items in mobile
@@ -1246,6 +1411,52 @@ $logo_exists = !empty($logo_path);
 
     <!-- Main Content -->
     <main class="main-content">
+
+        <?php
+        // Warn before access is lost, not after. Only the company's own admin
+        // gets the "Renew" button, because only they can act on it.
+        $sub_days = (int)$SUBSCRIPTION['days_left'];
+        if ($SUBSCRIPTION['is_active'] && $sub_days <= 7):
+            $sub_urgent    = $sub_days <= 2;
+            $sub_is_admin  = (int)($_SESSION['role_id'] ?? 0) === 1;
+            $sub_banner_id = 'subbanner-' . TENANT_SLUG . '-' . ($SUBSCRIPTION['ends_at']
+                ? $SUBSCRIPTION['ends_at']->format('Ymd') : 'x');
+        ?>
+        <div class="sub-banner <?= $sub_urgent ? 'urgent' : '' ?>" id="<?= htmlspecialchars($sub_banner_id) ?>" hidden>
+            <span class="grow">
+                <strong><?= htmlspecialchars($SUBSCRIPTION['in_trial'] ? 'Free trial ending' : 'Subscription ending') ?>:</strong>
+                <?= htmlspecialchars(subscription_summary($SUBSCRIPTION)) ?>
+                <?php if (!$sub_is_admin): ?>
+                    Please ask your administrator to arrange payment.
+                <?php endif; ?>
+            </span>
+            <?php if ($sub_is_admin): ?>
+                <a class="act" href="billing.php">Renew now</a>
+            <?php endif; ?>
+            <button class="dismiss" type="button" aria-label="Dismiss">&times;</button>
+        </div>
+
+        <script>
+        // Dismissal is remembered per company AND per end-date, so renewing (or
+        // slipping another day closer) shows the banner again rather than
+        // leaving it silently hidden.
+        (function () {
+            var el = document.getElementById(<?= json_encode($sub_banner_id) ?>);
+            if (!el) { return; }
+            var key = 'dismissed:' + el.id;
+            try {
+                if (localStorage.getItem(key) !== '1') { el.hidden = false; }
+            } catch (e) {
+                el.hidden = false;   // private mode / storage blocked: still warn them
+            }
+            el.querySelector('.dismiss').addEventListener('click', function () {
+                el.hidden = true;
+                try { localStorage.setItem(key, '1'); } catch (e) {}
+            });
+        })();
+        </script>
+        <?php endif; ?>
+
         <?php if (!$can_view_current_page): ?>
             <div class="permission-denied">
                 <i class="fas fa-lock"></i>
@@ -1269,6 +1480,12 @@ $logo_exists = !empty($logo_path);
         <?php endif; ?>
     </main>
 
+    <?php
+    // The AI assistant. Renders nothing unless it is configured and enabled for
+    // this company, so there is never a bubble that only produces an error.
+    include __DIR__ . '/partials/ai-assistant.php';
+    ?>
+
     <script>
         // ============================================================
         // GLOBAL HOMEPAGE TRANSLATIONS OBJECT (ENGLISH + SWAHILI)
@@ -1284,12 +1501,8 @@ $logo_exists = !empty($logo_path);
                 operations: 'Operations',
                 status: 'Status',
                 projectsMenu: 'Projects',
-                projectList: 'Project List',
                 categories: 'Categories',
                 groups: 'Groups',
-                expensesMenu: 'Expenses',
-                expensesCategories: 'Categories',
-                expensesGroups: 'Groups',
                 settings: 'Settings',
                 customerManagement: 'Customer Management',
                 companySettings: 'Company Settings',
@@ -1298,6 +1511,7 @@ $logo_exists = !empty($logo_path);
                 roles: 'Roles',
                 permissions: 'Permissions',
                 systemSettings: 'System Settings',
+                billing: 'Subscription & Billing',
                 user: 'User',
                 profile: 'Profile',
                 invoices: 'Invoices',
@@ -1310,12 +1524,8 @@ $logo_exists = !empty($logo_path);
                 operations: 'Uendeshaji',
                 status: 'Hali',
                 projectsMenu: 'Miradi',
-                projectList: 'Orodha ya Miradi',
                 categories: 'Kategoria',
                 groups: 'Vikundi',
-                expensesMenu: 'Matumizi',
-                expensesCategories: 'Kategoria',
-                expensesGroups: 'Vikundi',
                 settings: 'Mipangilio',
                 customerManagement: 'Usimamizi wa Wateja',
                 companySettings: 'Mipangilio ya Kampuni',
@@ -1324,6 +1534,7 @@ $logo_exists = !empty($logo_path);
                 roles: 'Majukumu',
                 permissions: 'Ruhusa',
                 systemSettings: 'Mipangilio ya Mfumo',
+                billing: 'Usajili na Malipo',
                 user: 'Mtumiaji',
                 profile: 'Wasifu',
                 invoices: 'Ankara',

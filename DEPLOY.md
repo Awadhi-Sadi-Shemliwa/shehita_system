@@ -53,14 +53,32 @@ nano .env          # fill in strong values
 openssl rand -base64 24
 ```
 
-`.env` must define:
+`.env` must define (see `.env.example` for the annotated full list):
 
-| Variable                 | What it is                                      |
-|--------------------------|-------------------------------------------------|
-| `MYSQL_ROOT_PASSWORD`    | DB password (also used by the app to connect)   |
-| `DB_NAME`                | Database name, e.g. `shehita_business`          |
-| `ADMIN_DEFAULT_EMAIL`    | First admin login email                         |
-| `ADMIN_DEFAULT_PASSWORD` | First admin login password (change after login) |
+| Variable                  | What it is                                                        |
+|---------------------------|-------------------------------------------------------------------|
+| `MYSQL_ROOT_PASSWORD`     | DB password. The app connects as root because creating a company needs `CREATE DATABASE`. |
+| `CONTROL_DB_NAME`         | The platform's own database, e.g. `shehita_control`               |
+| `APP_BASE_URL`            | `https://system.shehita.co.tz` — **used to build every emailed link**, so it must be exact |
+| `TRIAL_DAYS`              | Free trial length, default 14                                     |
+| `PLATFORM_ADMIN_EMAIL`    | SHEHITA's first console login (not a client login)                |
+| `PLATFORM_ADMIN_PASSWORD` | …and its password. Change it after first sign-in.                 |
+| `BILLING_ADMIN_EMAILS`    | Who receives the one-click "confirm this payment" emails          |
+| `MAIL_DRIVER`             | `resend` (recommended), `smtp`, or `log`                          |
+| `RESEND_API_KEY`          | Required when `MAIL_DRIVER=resend`                                |
+| `MAIL_FROM`               | e.g. `SHEHITA EMS <no-reply@shehita.co.tz>`                       |
+| `CRON_KEY`                | Protects the daily reminder endpoint                              |
+| `AI_API_KEY`              | Enables the AI assistant. Leave empty to disable it.              |
+| `AI_BASE_URL`             | Model endpoint, default `https://api.groq.com/openai/v1`. Any OpenAI-compatible provider works. |
+| `AI_MODEL`                | Default `llama-3.3-70b-versatile`                                 |
+
+> There is no `DB_NAME` any more. Each client company gets its own database
+> (`shems_<slug>`), created when they sign up.
+
+> **Email is not optional.** The entire payment and activation flow runs through
+> it: welcome messages, trial reminders, the confirmation link SHEHITA clicks,
+> and invoices. If mail is not configured, customers can still be activated from
+> the admin console, but nobody will be told anything.
 
 Then start the stack:
 
@@ -91,8 +109,28 @@ sudo nginx -t && sudo systemctl reload nginx
 sudo certbot --nginx -d system.shehita.co.tz
 ```
 
-Visit **https://system.shehita.co.tz** and log in with your
-`ADMIN_DEFAULT_*` credentials. **Change the admin password immediately.**
+Visit **https://system.shehita.co.tz/admin/** and sign in with your
+`PLATFORM_ADMIN_*` credentials. **Change that password immediately.**
+
+Then, in the console, open **Settings** and fill in your payment instructions
+(bank account, Lipa namba) and the SHEHITA details printed on invoices — clients
+see those on their billing page, and they start out as placeholders.
+
+`https://system.shehita.co.tz/` itself redirects to **/signup**, which is where
+client companies create their own accounts.
+
+### If a second hostname needs to keep working
+
+ARC previously ran as a separate deployment on `arc-system.shehita.co.tz`. After
+it is adopted as a company (see below), that hostname keeps working via a vhost
+that rewrites it onto the tenant path:
+
+```bash
+sudo cp deploy/nginx/arc-system.shehita.co.tz.conf         /etc/nginx/sites-available/arc-system.shehita.co.tz
+sudo ln -s /etc/nginx/sites-available/arc-system.shehita.co.tz /etc/nginx/sites-enabled/
+sudo nginx -t && sudo systemctl reload nginx
+sudo certbot --nginx -d arc-system.shehita.co.tz
+```
 
 ---
 
@@ -133,6 +171,67 @@ trigger it manually from the **Actions** tab → *Deploy to Contabo* →
 
 ---
 
+## 5. Scheduled jobs
+
+Two cron entries. Add them with `crontab -e`:
+
+```cron
+# Trial and renewal reminders. Safe to run more than once a day -- it will not
+# re-send anything it has already sent.
+0 7 * * * curl -fsS -H "X-Cron-Key: YOUR_CRON_KEY" http://127.0.0.1:8080/cron/subscription-notices.php >> /var/log/shehita-notices.log 2>&1
+
+# Nightly backup of every company's database plus uploaded logos.
+30 2 * * * /opt/shehita/cron/backup.sh >> /var/log/shehita-backup.log 2>&1
+```
+
+> **Backups matter more than they used to.** With one database per company,
+> losing `shems_<slug>` loses that whole client. `cron/backup.sh` dumps
+> `--all-databases`, verifies the dump decompresses and is not truncated before
+> pruning older ones, and archives `uploads/` separately (logos are not in MySQL).
+
+---
+
+## 6. Bringing an existing installation in as a company
+
+For ARC, or any other separate copy of this codebase you want to fold in.
+
+Its database already has the right schema, so nothing is migrated — it is
+**adopted**. No rows are copied and nothing in it is rewritten.
+
+```bash
+# 1. Restore that installation's database onto this MySQL server, if it is not
+#    already here:
+docker compose -f docker-compose.prod.yml exec -T db     mysql -u root -p"$MYSQL_ROOT_PASSWORD" -e "CREATE DATABASE arc_business"
+gunzip < arc_dump.sql.gz | docker compose -f docker-compose.prod.yml exec -T db     mysql -u root -p"$MYSQL_ROOT_PASSWORD" arc_business
+
+# 2. Copy its logo in
+cp /path/to/arc.png uploads/systemlogo/arc.png
+
+# 3. See exactly what would happen, changing nothing:
+docker compose -f docker-compose.prod.yml exec web php cron/import-tenant.php     --slug=arc --name="Actuarial and Risk Consulting" --db=arc_business     --email=admin@arc.co.tz --logo=uploads/systemlogo/arc.png     --primary='#7d5419' --days=3650 --dry-run
+
+# 4. Run it for real by dropping --dry-run
+```
+
+The existing user accounts in that database keep working unchanged — no new
+administrator is created. Add the rewrite vhost above so old bookmarks survive,
+then stop the old container.
+
+---
+
+## 7. Confirming a deploy worked
+
+```bash
+docker compose -f docker-compose.prod.yml exec web php tests/smoke.php
+```
+
+Drives the real endpoints end to end and cleans up after itself. It creates and
+drops two databases named `shems_smoketest_*` and sends a handful of emails to
+`*.test` addresses, so it is safe alongside live customers — but read the note at
+the top of the file before running it against production for the first time.
+
+---
+
 ## Day-to-day commands (on the VPS)
 
 | Task                     | Command                                                       |
@@ -143,6 +242,10 @@ trigger it manually from the **Actions** tab → *Deploy to Contabo* →
 | Stop (keep data)         | `docker compose -f docker-compose.prod.yml stop`              |
 | Manual redeploy          | `git pull && docker compose -f docker-compose.prod.yml up -d --build` |
 | Find generated admin pw  | `docker compose -f docker-compose.prod.yml logs web \| grep "generated password"` |
+| List client databases    | `docker compose -f docker-compose.prod.yml exec db mysql -uroot -p -e "SHOW DATABASES LIKE 'shems_%'"` |
+| Send reminders by hand   | `docker compose -f docker-compose.prod.yml exec web php cron/subscription-notices.php` |
+| Back up now              | `./cron/backup.sh`                                            |
 
 The MySQL data lives in the named Docker volume `dbdata` and persists across
-restarts and rebuilds.
+restarts and rebuilds — that volume now holds every client company's database,
+so it is the single most important thing on the server to back up.

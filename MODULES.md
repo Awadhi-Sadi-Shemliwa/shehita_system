@@ -1,13 +1,22 @@
 # SHEHITA Enterprise Management System — Modules & Data Model
 
-A plain PHP (no framework) + MySQL business management system. `homepage.php` is the
-application shell: it renders the top navbar and includes `modules/<page>.php` based on
-the `?page=` query parameter. Every module is gated by the role-based access control
-(RBAC) helpers defined in `config.php` (`canView/canAdd/canEdit/canDelete`). Role
-`role_id = 1` ("Super Admin") implicitly has full access to everything.
+A plain PHP (no framework) + MySQL business management system, sold as a subscription to
+multiple client companies from one deployment. `homepage.php` is the application shell: it
+renders the top navbar and includes `modules/<page>.php` based on the `?page=` query
+parameter. Every module is gated by the role-based access control (RBAC) helpers defined in
+`config.php` (`canView/canAdd/canEdit/canDelete`).
 
-Default login: the admin account seeded by `config.php` from the
-`ADMIN_DEFAULT_EMAIL` / `ADMIN_DEFAULT_PASSWORD` environment variables.
+`role_id = 1` ("Super Admin") implicitly has full access — **within its own company**.
+SHEHITA's own staff are a separate identity in the control database entirely; see
+`admin/`.
+
+**Every company has its own database.** The tables described below exist once per company
+in `shems_<slug>`, and none of them carries a company id, because the isolation is at the
+database level. `bootstrap.php` decides which database `$conn` points at before any module
+runs, which is why nothing in `modules/` needed changing when multi-tenancy was added.
+
+There is no default login. Companies — and their first administrator — are created at
+`/signup.php`. See [README.md](README.md) for the architecture.
 
 ---
 
@@ -15,14 +24,38 @@ Default login: the admin account seeded by `config.php` from the
 
 | File | Purpose |
 |------|---------|
-| `index.php` | Entry point. Redirects to `login.php`. |
-| `config.php` | DB connection, schema bootstrap, default seed data (admin dept/role/user), and the RBAC helper functions. Returns the `$conn` mysqli object. |
+| `bootstrap.php` | **First line of every entry point.** Resolves which company the URL belongs to, opens a session scoped to that company (replacing `session_start()`), defines `TENANT_DB`, and resolves the subscription into `$SUBSCRIPTION`. |
+| `index.php` | Entry point. Redirects to the company's `login.php`, or to `/signup.php` when the URL names no company. |
+| `config.php` | Connects to the resolved company's database, verifies its schema via `lib/schema.php`, and defines the RBAC helpers. Returns the `$conn` mysqli object. |
 | `login.php` | Authenticates a user, sets session vars, loads permissions into the session. |
-| `logout.php` | Destroys the session. |
+| `logout.php` | Destroys the session and expires the company-scoped cookie. |
 | `forgotpassword.php` | Password recovery via the user's security question/answer. |
 | `aboutus.php` | Public informational page. |
-| `homepage.php` | Authenticated shell: top navbar, dropdown menus, 30-min idle timeout, dynamic module loader, permission checks. |
+| `homepage.php` | Authenticated shell: top navbar, 30-min idle timeout, **the subscription gate**, the renewal banner, the module loader, permission checks, and the AI assistant. |
 | `heartbeat.php` | Keeps the session alive (AJAX ping) so active users aren't timed out. |
+| `signup.php` | Public. Creates a company: its database, its administrator, its logo and its brand palette. |
+| `billing.php` | The company administrator's subscription page. Reachable when the subscription has lapsed. |
+| `expired.php` | What ordinary staff see once a subscription has lapsed. |
+| `invoice-view.php` | Customer-facing subscription invoice, opened by emailed token or by the company admin. |
+
+## Platform files
+
+| Path | Purpose |
+|------|---------|
+| `lib/schema.php` | The definition of every table a company has, plus the schema version that drives migrations across all companies. |
+| `lib/control_db.php` | The platform's own tables: companies, packages, payments, invoices, SHEHITA logins, audit. |
+| `lib/subscription.php` | `subscription_resolve()` — the single source of truth for whether a company is active — plus activation, which stacks periods and is idempotent on `(method, reference)`. |
+| `lib/brand.php` | Reads a brand colour out of an uploaded logo and generates the nine-step palette, with a contrast guard. |
+| `lib/theme.php` | Emits the per-company `:root` override and resolves the logo. |
+| `lib/provision.php` | Creating a company (with rollback) and destroying one. |
+| `lib/mailer.php`, `lib/email_templates.php` | Every email in the subscription flow. |
+| `lib/invoice_render.php` | The subscription invoice document (A4 print CSS, no PDF library). |
+| `lib/ai_tools.php` | The complete, read-only, permission-checked surface the AI assistant can reach. |
+| `admin/` | SHEHITA's console: companies, payments, packages, settings, and the emailed one-click payment confirmation. |
+| `ai/chat.php` | The assistant endpoint. |
+| `cron/subscription-notices.php` | Daily trial/renewal reminders. Idempotent. |
+| `cron/backup.sh` | Nightly dump of every company's database plus uploads. |
+| `cron/import-tenant.php` | Adopts an existing installation's database as a company (used for ARC). |
 
 ---
 
