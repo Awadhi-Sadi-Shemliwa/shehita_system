@@ -79,6 +79,14 @@ if ($count > 1) {
 // Initialize variables for messages
 $company_message = '';
 $company_message_type = '';
+$company_apply_changes = false;
+
+// Show the save confirmation after the page refreshes with the new tenant theme.
+if (isset($_SESSION['company_settings_flash']) && is_array($_SESSION['company_settings_flash'])) {
+    $company_message = (string)($_SESSION['company_settings_flash']['message'] ?? '');
+    $company_message_type = (string)($_SESSION['company_settings_flash']['type'] ?? 'success');
+    unset($_SESSION['company_settings_flash']);
+}
 
 // Upload directory for logos -- SCOPED TO THIS COMPANY.
 //
@@ -233,6 +241,7 @@ if (isset($_POST['company_update']) && !canEdit($conn, $user_role_id, $module_na
         : '';
 
     $logo_url = $keep_existing_logo ? $current_logo_url : '';
+    $new_logo_path = null;
     
     if (!empty($logo_data) && strpos($logo_data, 'data:image/') === 0) {
         // Process base64 image upload
@@ -274,6 +283,7 @@ if (isset($_POST['company_update']) && !canEdit($conn, $user_role_id, $module_na
                         }
                     }
                     $logo_url = $upload_dir . $filename;
+                    $new_logo_path = $filepath;
                 } else {
                     $php_error = error_get_last();
                     $reason = ($php_error && !empty($php_error['message'])) ? $php_error['message'] : 'unknown error (the disk may be full)';
@@ -286,6 +296,8 @@ if (isset($_POST['company_update']) && !canEdit($conn, $user_role_id, $module_na
     }
     
     if (empty($errors)) {
+        $settings_saved = false;
+
         // Check if a record already exists
         $check_query = $conn->query("SELECT id, logo_url FROM company_settings LIMIT 1");
         
@@ -312,6 +324,7 @@ if (isset($_POST['company_update']) && !canEdit($conn, $user_role_id, $module_na
             if ($update_stmt->execute()) {
                 $company_message = "Company settings updated successfully!";
                 $company_message_type = "success";
+                $settings_saved = true;
             } else {
                 $company_message = "Error updating company settings: " . $conn->error;
                 $company_message_type = "danger";
@@ -330,6 +343,7 @@ if (isset($_POST['company_update']) && !canEdit($conn, $user_role_id, $module_na
             if ($insert_stmt->execute()) {
                 $company_message = "Company settings saved successfully!";
                 $company_message_type = "success";
+                $settings_saved = true;
             } else {
                 $company_message = "Error saving company settings: " . $conn->error;
                 $company_message_type = "danger";
@@ -337,42 +351,107 @@ if (isset($_POST['company_update']) && !canEdit($conn, $user_role_id, $module_na
             $insert_stmt->close();
         }
 
-        // Persist the brand colour to the CONTROL database, where bootstrap.php
-        // reads it. Regenerating the ramp here rather than storing loose hex
-        // values means the contrast guard in brand_ramp() still applies -- a
-        // company that picks bright yellow still gets a readable navbar.
-        if ($brand_choice !== '' && defined('TENANT_ID')) {
+        // Keep the tenant-level logo and palette in the CONTROL database,
+        // which bootstrap.php reads before it connects to this company's DB.
+        // A newly uploaded logo sets the theme unless the user explicitly
+        // changed the brand colour in this same form submission.
+        if ($settings_saved && defined('TENANT_ID')) {
             require_once __DIR__ . '/../lib/brand.php';
             require_once __DIR__ . '/../lib/control_db.php';
 
-            if (hex_to_rgb($brand_choice) !== null) {
+            $cs_palette = null;
+            $current_brand_primary = strtolower((string)(tenant_palette()['primary'] ?? ''));
+            $brand_choice_is_valid = $brand_choice !== '' && hex_to_rgb($brand_choice) !== null;
+            $brand_choice_was_changed = $brand_choice_is_valid
+                && strtolower($brand_choice) !== $current_brand_primary;
+
+            if ($brand_choice_was_changed) {
                 $cs_palette = brand_ramp(strtolower($brand_choice));
-                $cs_json    = json_encode($cs_palette, JSON_UNESCAPED_SLASHES);
+            } elseif ($new_logo_path !== null && function_exists('imagecreatetruecolor')) {
+                // The extraction helper ignores backgrounds and neutral text.
+                // If this logo has no usable color, leave the current palette intact.
+                $logo_primary = extract_brand_primary($new_logo_path);
+                if ($logo_primary !== null) {
+                    $cs_palette = brand_ramp($logo_primary);
+                }
+            }
+
+            $cs_control = control_db();
+            $cs_tid = TENANT_ID;
+            $cs_logo_path = $logo_url !== '' ? $logo_url : null;
+
+            if ($cs_palette !== null) {
+                $cs_json = json_encode($cs_palette, JSON_UNESCAPED_SLASHES);
                 $cs_primary = $cs_palette['primary'];
-                $cs_control = control_db();
-                $cs_tid     = TENANT_ID;
-
                 $cs_stmt = $cs_control->prepare(
-                    "UPDATE tenants SET brand_primary = ?, brand_ramp = ? WHERE id = ?"
+                    "UPDATE tenants SET logo_path = ?, brand_primary = ?, brand_ramp = ? WHERE id = ?"
                 );
-                $cs_stmt->bind_param("ssi", $cs_primary, $cs_json, $cs_tid);
-                $cs_stmt->execute();
-                $cs_stmt->close();
-
-                // The page around this module was already rendered with the old
-                // palette, so tell the user rather than leaving them wondering
-                // why nothing looks different yet.
-                $company_message .= " Your brand colour was updated — reload the page to see it applied.";
+                if ($cs_stmt === false) {
+                    error_log('Company Settings: could not prepare tenant branding update: ' . $cs_control->error);
+                    $company_message .= " Company settings were saved, but tenant branding could not be updated.";
+                    $company_message_type = "danger";
+                } else {
+                    $cs_stmt->bind_param("sssi", $cs_logo_path, $cs_primary, $cs_json, $cs_tid);
+                    if ($cs_stmt->execute()) {
+                        $company_message .= " Your logo and theme are now active across your tenant.";
+                    } else {
+                        error_log('Company Settings: tenant branding update failed: ' . $cs_stmt->error);
+                        $company_message .= " Company settings were saved, but tenant branding could not be updated.";
+                        $company_message_type = "danger";
+                    }
+                    $cs_stmt->close();
+                }
             } else {
+                $cs_stmt = $cs_control->prepare(
+                    "UPDATE tenants SET logo_path = ? WHERE id = ?"
+                );
+                if ($cs_stmt === false) {
+                    error_log('Company Settings: could not prepare tenant logo update: ' . $cs_control->error);
+                    $company_message .= " Company settings were saved, but the tenant logo could not be updated.";
+                    $company_message_type = "danger";
+                } else {
+                    $cs_stmt->bind_param("si", $cs_logo_path, $cs_tid);
+                    if ($cs_stmt->execute()) {
+                        $company_message .= $new_logo_path !== null
+                            ? " Your logo is now active across your tenant; the existing theme colour was kept."
+                            : " Tenant branding was synchronized.";
+                    } else {
+                        error_log('Company Settings: tenant logo update failed: ' . $cs_stmt->error);
+                        $company_message .= " Company settings were saved, but the tenant logo could not be updated.";
+                        $company_message_type = "danger";
+                    }
+                    $cs_stmt->close();
+                }
+            }
+
+            if ($brand_choice !== '' && !$brand_choice_is_valid) {
                 $company_message .= " (The brand colour was not a valid hex value like #7b583f, so it was left unchanged.)";
             }
+        }
+
+        if ($settings_saved && $company_message_type === 'success') {
+            $_SESSION['company_settings_flash'] = [
+                'message' => $company_message,
+                'type' => $company_message_type,
+            ];
+            $company_apply_changes = true;
         }
     } else {
         $company_message = implode("<br>", $errors);
         $company_message_type = "danger";
     }
 }
+?>
 
+<?php if ($company_apply_changes): ?>
+<script>
+    // Load the saved tenant palette and logo from a fresh request, without
+    // prompting the browser to submit the form again.
+    window.location.replace(window.location.pathname + window.location.search);
+</script>
+<?php endif; ?>
+
+<?php
 /**
  * Current brand palette, for the colour picker below. Read from the control
  * database via lib/theme.php so it always matches what the pages actually use.
@@ -419,7 +498,7 @@ const company_translations = {
         cancel: 'Cancel',
         clearForm: 'Clear Form',
         loadingCompanyData: 'Loading company data...',
-        processing: 'Processing...',
+        processing: 'Saving and applying your settings...',
         companyDataLoaded: 'Company data loaded successfully',
         companySaved: 'Company settings saved successfully',
         companyUpdated: 'Company settings updated successfully',
@@ -475,7 +554,7 @@ const company_translations = {
         cancel: 'Ghairi',
         clearForm: 'Futa Fomu',
         loadingCompanyData: 'Inapakia taarifa za kampuni...',
-        processing: 'Inashughulikia...',
+        processing: 'Inahifadhi na kutumia mipangilio yako...',
         companyDataLoaded: 'Taarifa za kampuni zimepakiwa',
         companySaved: 'Mipangilio ya kampuni imehifadhiwa',
         companyUpdated: 'Mipangilio ya kampuni imesasishwa',
@@ -1385,8 +1464,8 @@ window.updateCompanyLanguage = updateCompanyLanguage;
                                    style="flex:1;">
                         </div>
                         <div style="font-size:.8rem;color:var(--gray-500);margin-top:6px;line-height:1.5;">
-                            Taken from your logo when you signed up. Change it here if it is not quite
-                            your brand — the whole system re-colours from this one value.
+                            Derived from your logo when it is uploaded. You can adjust it here if needed;
+                            the whole system re-colours from this value.
                         </div>
                         <div style="margin-top:9px;display:flex;gap:3px;align-items:center;">
                             <span style="font-size:.78rem;color:var(--gray-500);margin-right:5px;">Preview:</span>
@@ -1874,6 +1953,8 @@ window.updateCompanyLanguage = updateCompanyLanguage;
                     event.preventDefault();
                     const lang = currentCompanyLang;
                     company_showAlert(company_translations[lang].validationError, 'error');
+                } else {
+                    company_showProcessing();
                 }
             });
         }
