@@ -192,35 +192,38 @@ $baseUrl = rtrim(getenv('APP_BASE_URL') ?: 'https://system.shehita.co.tz', '/');
         * { margin: 0; padding: 0; box-sizing: border-box; }
 
         :root {
-            --brown-900: #3e2b1f; --brown-800: #5c3e2d; --brown-700: #7b583f;
-            --brown-600: #9b7a5a; --brown-500: #b89b7e; --brown-400: #d4bfa8;
-            --brown-300: #e8d9cc; --brown-200: #f0e8df; --brown-100: #f7f2ec;
+            --brown-900: #4a090c; --brown-800: #5e0b0f; --brown-700: #780f12;
+            --brown-600: #942126; --brown-500: #ad4549; --brown-400: #c97b7e;
+            --brown-300: #e4bfc0; --brown-200: #f0dfe0; --brown-100: #fbf3f3;
             --gray-500: #64748b; --gray-700: #334155; --gray-800: #1e293b;
         }
 
         body {
-            font-family: 'Inter', system-ui, sans-serif; min-height: 100vh; padding: 34px 16px 70px;
-            background: linear-gradient(135deg, var(--brown-900) 0%, var(--brown-700) 55%, var(--brown-500) 100%);
+            font-family: 'Inter', system-ui, sans-serif; min-height: 100vh; padding: 48px 16px 64px;
+            background:
+                radial-gradient(ellipse at 12% 8%, rgb(255 255 255 / .12), transparent 34%),
+                linear-gradient(145deg, #3e080b 0%, var(--brown-900) 38%, var(--brown-700) 100%);
             color: var(--gray-800);
         }
 
-        .wrap { max-width: 640px; margin: 0 auto; }
+        .wrap { max-width: 660px; margin: 0 auto; }
 
-        .brand { text-align: center; margin-bottom: 22px; }
-        .brand .mark { color: #fff; font-size: 1.35rem; font-weight: 700; letter-spacing: .06em; }
-        .brand .sub  { color: rgba(255,255,255,.8); font-size: .9rem; margin-top: 5px; }
+        .brand { text-align: center; margin-bottom: 26px; }
+        .brand .mark { color: #fff; font-size: 1.45rem; font-weight: 700; letter-spacing: .075em; }
+        .brand .sub  { color: rgb(255 255 255 / .82); font-size: .9rem; margin-top: 7px; }
 
         .card {
-            background: #fff; border-radius: 18px; padding: 34px 34px 30px;
-            box-shadow: 0 20px 25px -5px rgb(0 0 0 / .22);
+            background: #fff; border: 1px solid rgb(255 255 255 / .7);
+            border-radius: 18px; padding: 38px 40px 34px;
+            box-shadow: 0 26px 70px rgb(32 4 6 / .28);
         }
 
-        h1 { font-size: 1.32rem; color: var(--brown-900); margin-bottom: 7px; }
-        .lede { color: var(--gray-500); font-size: .94rem; line-height: 1.62; margin-bottom: 24px; }
+        h1 { font-size: 1.42rem; line-height: 1.3; color: var(--brown-900); margin-bottom: 8px; }
+        .lede { color: var(--gray-500); font-size: .94rem; line-height: 1.7; margin-bottom: 25px; }
 
         .section-label {
             font-size: .76rem; font-weight: 700; letter-spacing: .07em; text-transform: uppercase;
-            color: var(--brown-600); margin: 26px 0 12px; padding-bottom: 6px;
+            color: var(--brown-700); margin: 27px 0 13px; padding-bottom: 8px;
             border-bottom: 1px solid var(--brown-200);
         }
         .section-label:first-of-type { margin-top: 4px; }
@@ -229,31 +232,33 @@ $baseUrl = rtrim(getenv('APP_BASE_URL') ?: 'https://system.shehita.co.tz', '/');
         .hint { font-size: .81rem; color: var(--gray-500); margin-top: 5px; line-height: 1.5; }
 
         input[type=text], input[type=email], input[type=password], input[type=tel] {
-            width: 100%; padding: 11px 14px; border: 1.5px solid var(--brown-200);
-            border-radius: 9px; font-family: inherit; font-size: .95rem; color: var(--gray-800);
-            transition: border-color .15s;
+            width: 100%; padding: 12px 14px; border: 1.5px solid #d9dce3;
+            border-radius: 9px; background: #fff; font-family: inherit; font-size: .95rem;
+            color: var(--gray-800); transition: border-color .15s, box-shadow .15s;
         }
-        input:focus { outline: none; border-color: var(--brown-600); }
+        input::placeholder { color: #94a3b8; }
+        input:focus { outline: none; border-color: var(--brown-600); box-shadow: 0 0 0 3px rgb(120 15 18 / .12); }
 
-        .field { margin-bottom: 17px; }
+        .field { min-width: 0; margin-bottom: 17px; }
         .grid2 { display: grid; gap: 15px; grid-template-columns: 1fr 1fr; }
         @media (max-width: 560px) { .grid2 { grid-template-columns: 1fr; } }
 
         .url-preview {
-            margin-top: 8px; padding: 10px 13px; background: var(--brown-100);
+            margin-top: 8px; padding: 12px 14px; background: var(--brown-100);
             border-radius: 8px; font-size: .87rem; color: var(--brown-800);
-            word-break: break-all; border-left: 3px solid var(--brown-500);
+            word-break: break-all; border: 1px solid var(--brown-200);
+            border-left: 3px solid var(--brown-700);
         }
         .url-preview strong { color: var(--brown-900); }
 
         .drop {
-            border: 2px dashed var(--brown-300); border-radius: 12px; padding: 22px;
-            text-align: center; cursor: pointer; transition: border-color .15s, background .15s;
-            background: var(--brown-100);
+            border: 1.5px dashed var(--brown-300); border-radius: 12px; padding: 24px;
+            text-align: center; cursor: pointer; transition: border-color .15s, background .15s, transform .15s;
+            background: linear-gradient(180deg, #fff 0%, var(--brown-100) 100%);
         }
-        .drop:hover { border-color: var(--brown-600); }
+        .drop:hover { border-color: var(--brown-600); background: #fffafa; }
         .drop input { display: none; }
-        .drop .icon { font-size: 1.7rem; }
+        .drop .icon { font-size: 1.7rem; color: var(--brown-700); }
         .drop .text { font-size: .89rem; color: var(--gray-700); margin-top: 7px; font-weight: 600; }
         .drop .sub  { font-size: .8rem; color: var(--gray-500); margin-top: 3px; }
         #logoPreview { max-height: 84px; max-width: 190px; object-fit: contain; margin-bottom: 9px; display: none; }
@@ -262,17 +267,23 @@ $baseUrl = rtrim(getenv('APP_BASE_URL') ?: 'https://system.shehita.co.tz', '/');
 
         .btn {
             width: 100%; padding: 14px; border: none; border-radius: 10px; margin-top: 24px;
-            background: var(--brown-700); color: #fff; font-weight: 600; font-size: 1rem;
-            cursor: pointer; font-family: inherit; transition: background .15s;
+            background: var(--brown-700); color: #fff; font-weight: 700; font-size: 1rem;
+            cursor: pointer; font-family: inherit; transition: background .15s, transform .15s, box-shadow .15s;
+            box-shadow: 0 6px 16px rgb(120 15 18 / .2);
         }
-        .btn:hover { background: var(--brown-800); }
+        .btn:hover { background: var(--brown-800); box-shadow: 0 8px 20px rgb(120 15 18 / .27); transform: translateY(-1px); }
+        .btn:focus-visible, .portal-link:focus-visible, .foot a:focus-visible {
+            outline: 3px solid #c97b7e; outline-offset: 3px;
+        }
+        .btn:active { transform: translateY(0); }
 
         .alert { padding: 14px 17px; border-radius: 10px; margin-bottom: 20px; font-size: .92rem; line-height: 1.6; }
         .alert.err { background: #fee2e2; color: #991b1b; border-left: 3px solid #dc2626; }
         .alert ul { margin: 7px 0 0 18px; }
 
-        .foot { text-align: center; margin-top: 20px; font-size: .88rem; color: rgba(255,255,255,.85); }
-        .foot a { color: #fff; font-weight: 600; }
+        .foot { text-align: center; margin-top: 22px; font-size: .88rem; color: rgb(255 255 255 / .85); }
+        .foot a { color: #fff; font-weight: 600; text-underline-offset: 3px; }
+        .foot a:hover { color: #ffe4e5; }
 
         /* success state */
         .done { text-align: center; }
@@ -286,8 +297,18 @@ $baseUrl = rtrim(getenv('APP_BASE_URL') ?: 'https://system.shehita.co.tz', '/');
             background: var(--brown-100); border: 1.5px solid var(--brown-300);
             color: var(--brown-900); font-weight: 600; text-decoration: none; word-break: break-all;
         }
-        .portal-link:hover { border-color: var(--brown-600); }
+        .portal-link:hover { border-color: var(--brown-600); background: #fffafa; }
         .done .note { color: var(--gray-500); font-size: .9rem; line-height: 1.65; }
+
+        @media (max-width: 600px) {
+            body { padding: 28px 13px 38px; }
+            .card { padding: 28px 22px 24px; border-radius: 15px; }
+            .brand { margin-bottom: 20px; }
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+            *, *::before, *::after { scroll-behavior: auto !important; transition-duration: .01ms !important; }
+        }
     </style>
 </head>
 <body>
@@ -322,7 +343,7 @@ $baseUrl = rtrim(getenv('APP_BASE_URL') ?: 'https://system.shehita.co.tz', '/');
 
     <?php else: ?>
 
-        <h1>Start your free trial</h1>
+        <h1>Create your company account</h1>
         <p class="lede">
             Tell us your company name and upload your logo. We will build your own management
             system — with your branding — and start a <?= (int)default_trial_days() ?>-day free trial
